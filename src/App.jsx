@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Flame, Droplets, Plus, Sparkles, Loader2, Trash2, ChevronLeft, ChevronRight,
-  Target, TrendingUp, X, UtensilsCrossed, Settings2, Leaf, Sunrise, Share2
+  Target, TrendingUp, X, UtensilsCrossed, Settings2, Leaf, Sunrise, Share2,
+  Scale, Dumbbell, User
 } from "lucide-react";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip,
+  ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line,
 } from "recharts";
 import { storage } from "./storage.js";
 
@@ -46,7 +47,7 @@ function uid() {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 function emptyDay() {
-  return { entries: [], water: 0 };
+  return { entries: [], water: 0, weight: null, workout: false };
 }
 function getDay(data, key) {
   return data.days[key] || emptyDay();
@@ -65,6 +66,23 @@ function dayTotals(day) {
 function clampPct(n) {
   return Math.max(0, Math.min(100, n));
 }
+function weekRows(data, numDays = 7) {
+  const keys = [];
+  for (let i = numDays - 1; i >= 0; i--) keys.push(addDays(todayKey(), -i));
+  return keys.map((k) => {
+    const d = keyToDate(k);
+    const day = getDay(data, k);
+    const totals = dayTotals(day);
+    return {
+      key: k,
+      date: d,
+      totals,
+      water: day.water,
+      weight: typeof day.weight === "number" ? day.weight : null,
+      workout: !!day.workout,
+    };
+  });
+}
 function formatDateLabel(key) {
   const d = keyToDate(key);
   return `${DOW_FULL[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
@@ -80,6 +98,8 @@ function buildDailySummary(key, day, totals, profile) {
   lines.push(`Carbs: ${totals.carbs} / ${profile.carbGoal} g`);
   lines.push(`Fat: ${totals.fat} / ${profile.fatGoal} g`);
   lines.push(`Water: ${day.water} / ${profile.waterGoal} ml`);
+  lines.push(`Weight: ${typeof day.weight === "number" ? `${day.weight} kg` : "not logged"}`);
+  lines.push(`Workout: ${day.workout ? "Yes" : "No"}`);
   if (day.entries.length) {
     lines.push("");
     lines.push("Meals logged:");
@@ -94,14 +114,7 @@ function buildDailySummary(key, day, totals, profile) {
 }
 
 function buildWeeklySummary(data) {
-  const keys = [];
-  for (let i = 6; i >= 0; i--) keys.push(addDays(todayKey(), -i));
-  const rows = keys.map((k) => {
-    const d = keyToDate(k);
-    const day = getDay(data, k);
-    const totals = dayTotals(day);
-    return { k, d, totals, water: day.water };
-  });
+  const rows = weekRows(data);
   const daysWithData = rows.filter((r) => r.totals.calories > 0 || r.water > 0);
   const avgCalories = daysWithData.length
     ? Math.round(daysWithData.reduce((s, r) => s + r.totals.calories, 0) / daysWithData.length)
@@ -109,12 +122,23 @@ function buildWeeklySummary(data) {
   const avgProtein = daysWithData.length
     ? Math.round(daysWithData.reduce((s, r) => s + r.totals.protein, 0) / daysWithData.length)
     : 0;
+  const avgCarbs = daysWithData.length
+    ? Math.round(daysWithData.reduce((s, r) => s + r.totals.carbs, 0) / daysWithData.length)
+    : 0;
+  const avgFat = daysWithData.length
+    ? Math.round(daysWithData.reduce((s, r) => s + r.totals.fat, 0) / daysWithData.length)
+    : 0;
+  const avgWater = daysWithData.length
+    ? Math.round(daysWithData.reduce((s, r) => s + r.water, 0) / daysWithData.length)
+    : 0;
   const waterGoalDays = rows.filter((r) => r.water >= data.profile.waterGoal).length;
+  const workoutDays = rows.filter((r) => r.workout).length;
+  const weighIns = rows.filter((r) => r.weight != null);
 
   const lines = [];
   lines.push("Sprout — Weekly Summary");
   lines.push(
-    `${MONTHS[rows[0].d.getMonth()]} ${rows[0].d.getDate()} – ${MONTHS[rows[6].d.getMonth()]} ${rows[6].d.getDate()}`
+    `${MONTHS[rows[0].date.getMonth()]} ${rows[0].date.getDate()} – ${MONTHS[rows[6].date.getMonth()]} ${rows[6].date.getDate()}`
   );
   lines.push("");
   lines.push(
@@ -124,13 +148,23 @@ function buildWeeklySummary(data) {
   lines.push("");
   rows.forEach((r) => {
     lines.push(
-      `${DOW[r.d.getDay()]} ${MONTHS[r.d.getMonth()]} ${r.d.getDate()}: ${r.totals.calories} kcal · ` +
-        `P${r.totals.protein} C${r.totals.carbs} F${r.totals.fat} · ${r.water}ml water`
+      `${DOW[r.date.getDay()]} ${MONTHS[r.date.getMonth()]} ${r.date.getDate()}: ${r.totals.calories} kcal · ` +
+        `P${r.totals.protein} C${r.totals.carbs} F${r.totals.fat} · ${r.water}ml water` +
+        `${r.weight != null ? ` · ${r.weight}kg` : ""}${r.workout ? " · worked out" : ""}`
     );
   });
   lines.push("");
-  lines.push(`Averages: ${avgCalories} kcal/day, ${avgProtein}g protein/day`);
+  lines.push(`Averages: ${avgCalories} kcal/day · ${avgProtein}g protein · ${avgCarbs}g carbs · ${avgFat}g fat · ${avgWater}ml water`);
   lines.push(`Water goal met: ${waterGoalDays} of 7 days`);
+  lines.push(`Workouts: ${workoutDays} of 7 days`);
+  if (weighIns.length >= 2) {
+    const delta = Math.round((weighIns[weighIns.length - 1].weight - weighIns[0].weight) * 10) / 10;
+    lines.push(`Weight: ${weighIns[0].weight}kg → ${weighIns[weighIns.length - 1].weight}kg (${delta > 0 ? "+" : ""}${delta}kg this week)`);
+  } else if (weighIns.length === 1) {
+    lines.push(`Weight: ${weighIns[0].weight}kg logged once this week`);
+  } else {
+    lines.push("Weight: not logged this week");
+  }
   return lines.join("\n");
 }
 
@@ -166,7 +200,49 @@ const DEFAULT_PROFILE = {
   carbGoal: 240,
   fatGoal: 70,
   waterGoal: 2500,
+  sex: "female",
+  age: 28,
+  heightCm: 165,
+  weightGoalKg: 60,
+  activityLevel: "moderate",
 };
+
+const ACTIVITY_LEVELS = [
+  { value: "sedentary", label: "Sedentary (little/no exercise)", mult: 1.2 },
+  { value: "light", label: "Light (1–3 days/week)", mult: 1.375 },
+  { value: "moderate", label: "Moderate (3–5 days/week)", mult: 1.55 },
+  { value: "active", label: "Active (6–7 days/week)", mult: 1.725 },
+  { value: "very_active", label: "Very active (hard daily training)", mult: 1.9 },
+];
+
+function activityMultiplier(level) {
+  return ACTIVITY_LEVELS.find((a) => a.value === level)?.mult || 1.55;
+}
+
+function latestLoggedWeight(data) {
+  const keys = Object.keys(data.days || {}).sort();
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const w = data.days[keys[i]]?.weight;
+    if (typeof w === "number" && w > 0) return w;
+  }
+  return null;
+}
+
+// Mifflin-St Jeor BMR -> TDEE -> a sensible starting split of calories/macros/water.
+function suggestGoals({ sex, age, heightCm, weightKg, activityLevel }) {
+  if (!weightKg || !heightCm || !age) return null;
+  let bmr;
+  if (sex === "male") bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + 5;
+  else if (sex === "female") bmr = 10 * weightKg + 6.25 * heightCm - 5 * age - 161;
+  else bmr = 10 * weightKg + 6.25 * heightCm - 5 * age - 78; // midpoint, used for "other"
+  const tdee = bmr * activityMultiplier(activityLevel);
+  const calorieGoal = Math.max(1200, Math.round(tdee / 10) * 10);
+  const proteinGoal = Math.round(weightKg * 1.8);
+  const fatGoal = Math.round((calorieGoal * 0.25) / 9);
+  const carbGoal = Math.max(50, Math.round((calorieGoal - proteinGoal * 4 - fatGoal * 9) / 4));
+  const waterGoal = Math.round((weightKg * 33) / 10) * 10;
+  return { calorieGoal, proteinGoal, carbGoal, fatGoal, waterGoal };
+}
 
 const STORAGE_KEY = "sprout-nutrition-data";
 
@@ -177,13 +253,20 @@ const STORAGE_KEY = "sprout-nutrition-data";
 async function callClaude(system, userText, maxTokens = 1000) {
   // Calls our own backend (api/claude.js) rather than Anthropic directly —
   // that's what keeps your API key off the device and out of the browser.
-  const res = await fetch("/api/claude", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ system, userText, maxTokens }),
-  });
+  let res;
+  try {
+    res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ system, userText, maxTokens }),
+    });
+  } catch (e) {
+    throw new Error("couldn't reach the server — check your internet connection.");
+  }
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error || "Request failed");
+  if (!res.ok) {
+    throw new Error(json.error || `server returned status ${res.status}`);
+  }
   return (json.text || "").trim();
 }
 
@@ -198,8 +281,13 @@ async function estimateNutrition(text) {
     "If the text isn't food at all, return {\"items\":[]}.";
   const raw = await callClaude(system, text, 800);
   const clean = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
-  if (!parsed.items) throw new Error("bad shape");
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    throw new Error("the response wasn't valid JSON — try rephrasing what you ate.");
+  }
+  if (!parsed.items) throw new Error("unexpected response shape from the model.");
   return parsed.items.map((it) => ({
     name: String(it.name || "Item").slice(0, 80),
     calories: Math.max(0, Math.round(Number(it.calories) || 0)),
@@ -391,6 +479,8 @@ function TodayTab({ data, setData, showToast, goLog }) {
   const [busy, setBusy] = useState(false);
   const [tip, setTip] = useState(data.tips?.[key] || "");
   const [tipBusy, setTipBusy] = useState(false);
+  const [weightInput, setWeightInput] = useState(day.weight != null ? String(day.weight) : "");
+  const [editingWeight, setEditingWeight] = useState(day.weight == null);
   const now = new Date();
 
   function updateDay(mutator) {
@@ -399,6 +489,23 @@ function TodayTab({ data, setData, showToast, goLog }) {
       const nd = mutator(d);
       return { ...prev, days: { ...prev.days, [key]: nd } };
     });
+  }
+
+  function handleSaveWeight() {
+    const val = parseFloat(weightInput);
+    if (!val || val <= 0) {
+      showToast("Enter a valid weight first.", "warn");
+      return;
+    }
+    const rounded = Math.round(val * 10) / 10;
+    updateDay((d) => ({ ...d, weight: rounded }));
+    setWeightInput(String(rounded));
+    setEditingWeight(false);
+    showToast(`Weight logged: ${rounded} kg`, "good");
+  }
+
+  function handleToggleWorkout() {
+    updateDay((d) => ({ ...d, workout: !d.workout }));
   }
 
   async function handleLog() {
@@ -423,7 +530,7 @@ function TodayTab({ data, setData, showToast, goLog }) {
         setText("");
       }
     } catch (e) {
-      showToast("Couldn't estimate that meal — check your connection and try again.", "warn");
+      showToast(e?.message ? `Couldn't log that meal — ${e.message}` : "Couldn't estimate that meal — check your connection and try again.", "warn");
     } finally {
       setBusy(false);
     }
@@ -442,7 +549,7 @@ function TodayTab({ data, setData, showToast, goLog }) {
       setTip(t);
       setData((prev) => ({ ...prev, tips: { ...prev.tips, [key]: t } }));
     } catch (e) {
-      showToast("Couldn't reach your coach right now — try again shortly.", "warn");
+      showToast(e?.message ? `Couldn't reach your coach — ${e.message}` : "Couldn't reach your coach right now — try again shortly.", "warn");
     } finally {
       setTipBusy(false);
     }
@@ -497,6 +604,53 @@ function TodayTab({ data, setData, showToast, goLog }) {
           showToast(`+${amt} ml logged`, "good");
         }}
       />
+
+      <div className="card body-card">
+        <div className="card-title"><Scale size={15} /> Body check-in</div>
+        <div className="weight-row">
+          {editingWeight ? (
+            <>
+              <div className="weight-input-group">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  placeholder="Weight"
+                  value={weightInput}
+                  onChange={(e) => setWeightInput(e.target.value)}
+                  className="weight-input"
+                  autoFocus={day.weight != null}
+                />
+                <span className="goal-field-unit">kg</span>
+              </div>
+              <button className="btn-primary btn-small" onClick={handleSaveWeight}>
+                {day.weight != null ? "Update" : "Log"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="weight-logged-pill">
+                <Scale size={13} /> {day.weight} kg logged today
+              </div>
+              <button className="btn-ghost btn-small" onClick={() => setEditingWeight(true)}>
+                Edit
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="workout-row">
+          <span className="workout-label"><Dumbbell size={15} /> Worked out today?</span>
+          <button
+            className={`workout-toggle ${day.workout ? "on" : ""}`}
+            onClick={handleToggleWorkout}
+            aria-pressed={day.workout}
+            aria-label="Toggle workout logged for today"
+          >
+            <span className="workout-toggle-thumb" />
+          </button>
+        </div>
+      </div>
 
       <div className="card log-card">
         <div className="card-title"><UtensilsCrossed size={15} /> Log a meal or snack</div>
@@ -583,7 +737,11 @@ function LogTab({ data, setData, showToast }) {
         </button>
         <div className="log-nav-label">
           <div className="log-nav-date">{isToday ? "Today" : `${DOW[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`}</div>
-          <div className="log-nav-sub">{totals.calories.toLocaleString()} kcal · {day.water.toLocaleString()} ml water</div>
+          <div className="log-nav-sub">
+            {totals.calories.toLocaleString()} kcal · {day.water.toLocaleString()} ml water
+            {day.weight != null && ` · ${day.weight} kg`}
+            {day.workout && " · worked out"}
+          </div>
         </div>
         <button
           className="icon-btn"
@@ -637,32 +795,21 @@ function LogTab({ data, setData, showToast }) {
 /* ---------------------------------------------------------------------- */
 
 function WeeklyTab({ data, showToast }) {
-  const keys = useMemo(() => {
-    const out = [];
-    for (let i = 6; i >= 0; i--) out.push(addDays(todayKey(), -i));
-    return out;
-  }, [data]);
+  const rows = useMemo(() => weekRows(data), [data]);
 
-  const chartData = keys.map((k) => {
-    const d = keyToDate(k);
-    const day = getDay(data, k);
-    const totals = dayTotals(day);
-    return {
-      label: DOW[d.getDay()],
-      calories: totals.calories,
-      water: day.water,
-      protein: totals.protein,
-    };
-  });
-
-  const daysWithData = keys.filter((k) => getDay(data, k).entries.length > 0 || getDay(data, k).water > 0);
-  const avgCalories = daysWithData.length
-    ? Math.round(daysWithData.reduce((s, k) => s + dayTotals(getDay(data, k)).calories, 0) / daysWithData.length)
-    : 0;
-  const avgProtein = daysWithData.length
-    ? Math.round(daysWithData.reduce((s, k) => s + dayTotals(getDay(data, k)).protein, 0) / daysWithData.length)
-    : 0;
-  const waterGoalDays = keys.filter((k) => getDay(data, k).water >= data.profile.waterGoal).length;
+  const daysWithData = rows.filter((r) => r.totals.calories > 0 || r.water > 0);
+  const avg = (fn) =>
+    daysWithData.length ? Math.round(daysWithData.reduce((s, r) => s + fn(r), 0) / daysWithData.length) : 0;
+  const avgCalories = avg((r) => r.totals.calories);
+  const avgProtein = avg((r) => r.totals.protein);
+  const avgCarbs = avg((r) => r.totals.carbs);
+  const avgFat = avg((r) => r.totals.fat);
+  const avgWater = avg((r) => r.water);
+  const waterGoalDays = rows.filter((r) => r.water >= data.profile.waterGoal).length;
+  const workoutDays = rows.filter((r) => r.workout).length;
+  const weighIns = rows.filter((r) => r.weight != null);
+  const weightChange =
+    weighIns.length >= 2 ? Math.round((weighIns[weighIns.length - 1].weight - weighIns[0].weight) * 10) / 10 : null;
 
   // streak: consecutive days ending yesterday within 15% of calorie goal
   let streak = 0;
@@ -694,6 +841,22 @@ function WeeklyTab({ data, showToast }) {
       ? `You hit your water goal on ${waterGoalDays} of the last 7 days — great habit.`
       : `You reached your water goal on ${waterGoalDays} of the last 7 days — keep a bottle within reach.`
   );
+  insights.push(
+    workoutDays >= 4
+      ? `You worked out ${workoutDays} of 7 days — strong consistency.`
+      : workoutDays > 0
+      ? `You worked out ${workoutDays} of 7 days — even one more session tends to move the needle.`
+      : "No workouts logged this week yet — the toggle on Today takes one tap."
+  );
+  if (weightChange != null) {
+    insights.push(
+      weightChange === 0
+        ? "Your weight held steady this week."
+        : `Weight ${weightChange < 0 ? "down" : "up"} ${Math.abs(weightChange)} kg since your first check-in this week.`
+    );
+  } else {
+    insights.push("Log your weight daily on the Today tab to start seeing a trend here.");
+  }
 
   async function handleShareWeek() {
     const text = buildWeeklySummary(data);
@@ -704,26 +867,7 @@ function WeeklyTab({ data, showToast }) {
 
   return (
     <div className="tab-panel">
-      <div className="card">
-        <div className="card-title"><TrendingUp size={15} /> Calories, last 7 days</div>
-        <div className="chart-wrap">
-          <ResponsiveContainer width="100%" height={190}>
-            <BarChart data={chartData} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 5" stroke="#E1E4D8" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#5B6B5A" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: "#5B6B5A" }} axisLine={false} tickLine={false} width={36} />
-              <ReferenceLine y={data.profile.calorieGoal} stroke="#B5533C" strokeDasharray="4 4" />
-              <Tooltip
-                cursor={{ fill: "rgba(217,164,65,0.12)" }}
-                contentStyle={{ borderRadius: 12, border: "1px solid #E1E4D8", fontSize: 12 }}
-              />
-              <Bar dataKey="calories" fill="#D9A441" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="stat-grid">
+      <div className="stat-grid stat-grid-wide">
         <div className="stat-box">
           <span className="stat-num">{avgCalories.toLocaleString()}</span>
           <span className="stat-label">avg kcal/day</span>
@@ -733,9 +877,79 @@ function WeeklyTab({ data, showToast }) {
           <span className="stat-label">avg protein</span>
         </div>
         <div className="stat-box">
+          <span className="stat-num">{avgWater.toLocaleString()}</span>
+          <span className="stat-label">avg water ml</span>
+        </div>
+        <div className="stat-box">
+          <span className="stat-num">{workoutDays}/7</span>
+          <span className="stat-label">workouts</span>
+        </div>
+        <div className="stat-box">
+          <span className="stat-num">{weightChange != null ? `${weightChange > 0 ? "+" : ""}${weightChange}kg` : "—"}</span>
+          <span className="stat-label">weight change</span>
+        </div>
+        <div className="stat-box">
           <span className="stat-num">{streak}</span>
           <span className="stat-label">day streak</span>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-title"><Scale size={15} /> Weight this week</div>
+        {weighIns.length > 0 ? (
+          <div className="chart-wrap">
+            <ResponsiveContainer width="100%" height={140}>
+              <LineChart data={rows.map((r) => ({ label: DOW[r.date.getDay()], weight: r.weight }))} margin={{ top: 6, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 5" stroke="#E1E4D8" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#5B6B5A" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  domain={["dataMin - 1", "dataMax + 1"]}
+                  tick={{ fontSize: 11, fill: "#5B6B5A" }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={34}
+                />
+                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E1E4D8", fontSize: 12 }} />
+                <Line type="monotone" dataKey="weight" stroke="#3E7CB1" strokeWidth={2.5} dot={{ r: 4, fill: "#3E7CB1" }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="tip-placeholder">No weigh-ins yet this week — log your weight on the Today tab to see a trend line here.</p>
+        )}
+      </div>
+
+      <div className="week-list">
+        {[...rows].reverse().map((r) => {
+          const isToday = r.key === todayKey();
+          const pct = clampPct(data.profile.calorieGoal > 0 ? (r.totals.calories / data.profile.calorieGoal) * 100 : 0);
+          return (
+            <div key={r.key} className={`week-day-card ${isToday ? "is-today" : ""}`}>
+              <div className="week-day-top">
+                <div className="week-day-date">
+                  <span className="week-day-dow">{isToday ? "Today" : DOW[r.date.getDay()]}</span>
+                  <span className="week-day-num">{MONTHS[r.date.getMonth()]} {r.date.getDate()}</span>
+                </div>
+                <div className="week-day-badges">
+                  {r.workout && <span className="badge badge-workout"><Dumbbell size={11} /> Workout</span>}
+                  {r.weight != null && <span className="badge badge-weight"><Scale size={11} /> {r.weight} kg</span>}
+                </div>
+              </div>
+              <div className="week-day-cal">
+                <span>{r.totals.calories.toLocaleString()} <span className="week-day-cal-goal">/ {data.profile.calorieGoal.toLocaleString()} kcal</span></span>
+              </div>
+              <div className="week-day-bar-track">
+                <div className="week-day-bar-fill" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="week-day-macros">
+                <span><i className="dot dot-clay" />{r.totals.protein}g</span>
+                <span><i className="dot dot-gold" />{r.totals.carbs}g</span>
+                <span><i className="dot dot-plum" />{r.totals.fat}g</span>
+                <span><i className="dot dot-water" />{r.water.toLocaleString()}ml</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="card">
@@ -750,7 +964,7 @@ function WeeklyTab({ data, showToast }) {
       <div className="card">
         <div className="card-title"><Share2 size={15} /> Share with your coach</div>
         <p className="tip-placeholder">
-          Send a plain-text summary — goals, day-by-day totals, and weekly averages — to whoever you're texting, emailing, or messaging.
+          Send a plain-text summary — goals, day-by-day totals, weight, workouts, and weekly averages — to whoever you're texting, emailing, or messaging.
         </p>
         <button className="btn-primary" onClick={handleShareWeek}>
           <Share2 size={16} /> Share weekly summary
@@ -765,7 +979,7 @@ function WeeklyTab({ data, showToast }) {
 /* ---------------------------------------------------------------------- */
 
 function GoalsTab({ data, setData, showToast }) {
-  const [form, setForm] = useState(data.profile);
+  const [form, setForm] = useState({ ...DEFAULT_PROFILE, ...data.profile });
   const dirty = JSON.stringify(form) !== JSON.stringify(data.profile);
 
   function field(key, label, unit, hint) {
@@ -789,8 +1003,83 @@ function GoalsTab({ data, setData, showToast }) {
     );
   }
 
+  function floatField(key, label, unit, step = "0.1") {
+    return (
+      <div className="goal-field">
+        <label>
+          <span className="goal-field-label">{label}</span>
+          <div className="goal-field-input">
+            <input
+              type="number"
+              inputMode="decimal"
+              step={step}
+              min="0"
+              value={form[key]}
+              onChange={(e) => setForm((f) => ({ ...f, [key]: Math.max(0, parseFloat(e.target.value || "0")) }))}
+            />
+            <span className="goal-field-unit">{unit}</span>
+          </div>
+        </label>
+      </div>
+    );
+  }
+
+  function selectField(key, label, options) {
+    return (
+      <div className="goal-field">
+        <label>
+          <span className="goal-field-label">{label}</span>
+          <div className="goal-field-input">
+            <select value={form[key]} onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+      </div>
+    );
+  }
+
+  function handleSuggest() {
+    const weightKg = latestLoggedWeight(data) || form.weightGoalKg;
+    const suggestion = suggestGoals({
+      sex: form.sex,
+      age: form.age,
+      heightCm: form.heightCm,
+      weightKg,
+      activityLevel: form.activityLevel,
+    });
+    if (!suggestion) {
+      showToast("Fill in your age, height, and weight first.", "warn");
+      return;
+    }
+    setForm((f) => ({ ...f, ...suggestion }));
+    showToast("Suggested goals filled in below — review, then save.", "good");
+  }
+
   return (
     <div className="tab-panel">
+      <div className="card">
+        <div className="card-title"><User size={15} /> About you</div>
+        {selectField("sex", "Sex", [
+          { value: "female", label: "Female" },
+          { value: "male", label: "Male" },
+          { value: "other", label: "Other" },
+        ])}
+        {field("age", "Age", "yrs")}
+        {field("heightCm", "Height", "cm")}
+        {floatField("weightGoalKg", "Target weight", "kg")}
+        {selectField("activityLevel", "Activity level", ACTIVITY_LEVELS.map((a) => ({ value: a.value, label: a.label })))}
+        <button className="btn-ghost" onClick={handleSuggest}>
+          <Sparkles size={14} /> Suggest goals for me
+        </button>
+        <span className="goal-field-hint suggest-hint">
+          Uses your most recent logged weight (or target weight if you haven't logged one yet) to estimate a starting
+          calorie, macro, and water target. Review before saving — it's a starting point, not a prescription.
+        </span>
+      </div>
+
       <div className="card">
         <div className="card-title"><Target size={15} /> Your daily goals</div>
         {field("calorieGoal", "Calories", "kcal")}
@@ -1027,6 +1316,19 @@ const CSS = `
 .water-goal { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
 .water-actions { display:flex; flex-wrap:wrap; gap: 8px; }
 
+.body-card { display:flex; flex-direction:column; gap: 16px; }
+.weight-row { display:flex; align-items:center; gap: 10px; }
+.weight-input-group { flex:1; display:flex; align-items:center; border: 1px solid var(--border); border-radius: 12px; background: #F7F9F2; overflow:hidden; }
+.weight-input { flex:1; border:none; background:transparent; padding: 9px 12px; font-size: 14px; color: var(--ink); width: 100%; }
+.weight-input:focus { outline: none; }
+.weight-logged-pill { flex:1; display:flex; align-items:center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--ink); background: #EEF1E6; border-radius: 12px; padding: 10px 12px; }
+.workout-row { display:flex; align-items:center; justify-content:space-between; }
+.workout-label { display:flex; align-items:center; gap: 7px; font-size: 13px; font-weight: 700; color: var(--ink); }
+.workout-toggle { width: 46px; height: 26px; border-radius: 999px; background: #E1E4D8; position: relative; border: none; flex-shrink:0; transition: background 0.25s ease; }
+.workout-toggle.on { background: var(--good); }
+.workout-toggle-thumb { position:absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: transform 0.25s cubic-bezier(.25,.9,.35,1); }
+.workout-toggle.on .workout-toggle-thumb { transform: translateX(20px); }
+
 .chip {
   display:flex; align-items:center; gap: 4px;
   border: 1px solid var(--border); background: #F7F9F2; color: var(--ink);
@@ -1098,17 +1400,37 @@ const CSS = `
 .dot-clay { background: var(--clay); }
 .dot-gold { background: var(--gold); }
 .dot-plum { background: var(--plum); }
+.dot-water { background: var(--water); }
 .entry-delete { position:absolute; top: 14px; right: 12px; background: none; border:none; color: #B7C2AE; padding: 4px; }
 .entry-delete:hover { color: var(--clay); }
 
 .chart-wrap { margin: 0 -6px; }
 .stat-grid { display:grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.stat-grid-wide .stat-box { padding: 12px 6px; }
 .stat-box { background: var(--surface); border:1px solid var(--border); border-radius: 16px; padding: 14px 8px; display:flex; flex-direction:column; align-items:center; gap: 3px; }
-.stat-num { font-family:'Fraunces', serif; font-size: 19px; font-weight: 700; }
-.stat-label { font-size: 10.5px; color: var(--ink-soft); text-align:center; }
+.stat-num { font-family:'Fraunces', serif; font-size: 17px; font-weight: 700; }
+.stat-label { font-size: 10px; color: var(--ink-soft); text-align:center; }
 .insight-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap: 10px; }
 .insight-list li { font-size: 13px; line-height: 1.5; padding-left: 16px; position:relative; }
 .insight-list li::before { content:''; position:absolute; left:0; top:7px; width:6px; height:6px; border-radius:50%; background: var(--gold); }
+
+.week-list { display:flex; flex-direction:column; gap: 10px; }
+.week-day-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px; animation: fadein 0.25s ease; }
+.week-day-card.is-today { border-color: var(--good); box-shadow: 0 0 0 1px var(--good); }
+.week-day-top { display:flex; align-items:flex-start; justify-content:space-between; gap: 10px; margin-bottom: 8px; }
+.week-day-date { display:flex; flex-direction:column; }
+.week-day-dow { font-family:'Fraunces', serif; font-weight: 600; font-size: 14.5px; }
+.week-day-num { font-size: 11px; color: var(--ink-soft); }
+.week-day-badges { display:flex; flex-wrap:wrap; gap: 6px; justify-content:flex-end; }
+.badge { display:flex; align-items:center; gap: 4px; font-size: 10.5px; font-weight: 700; padding: 4px 8px; border-radius: 999px; white-space:nowrap; }
+.badge-workout { background: rgba(76,139,91,0.14); color: var(--good); }
+.badge-weight { background: rgba(62,124,177,0.14); color: var(--water); }
+.week-day-cal { font-size: 13.5px; font-weight: 700; margin-bottom: 6px; }
+.week-day-cal-goal { font-weight: 500; color: var(--ink-soft); }
+.week-day-bar-track { height: 6px; border-radius: 5px; background: #EEF1E6; overflow:hidden; margin-bottom: 10px; }
+.week-day-bar-fill { height: 100%; border-radius: 5px; background: var(--gold); transition: width 0.6s cubic-bezier(.25,.9,.35,1); }
+.week-day-macros { display:flex; gap: 12px; font-size: 11px; color: var(--ink-soft); flex-wrap:wrap; }
+.week-day-macros span { display:flex; align-items:center; gap: 5px; }
 
 .goal-field { margin-bottom: 14px; }
 .goal-field label { display:block; }
@@ -1116,8 +1438,11 @@ const CSS = `
 .goal-field-input { display:flex; align-items:center; border: 1px solid var(--border); border-radius: 12px; background: #F7F9F2; overflow:hidden; }
 .goal-field-input input { flex:1; border:none; background:transparent; padding: 10px 12px; font-size: 14px; color: var(--ink); }
 .goal-field-input input:focus { outline: none; }
+.goal-field-input select { flex:1; border:none; background:transparent; padding: 10px 12px; font-size: 13.5px; color: var(--ink); appearance: none; -webkit-appearance: none; }
+.goal-field-input select:focus { outline: none; }
 .goal-field-unit { padding: 0 12px; font-size: 12px; color: var(--ink-soft); font-weight: 600; }
 .goal-field-hint { font-size: 11px; color: var(--ink-soft); margin-top: 4px; display:block; }
+.suggest-hint { margin-top: 10px; line-height: 1.5; }
 
 .toast {
   position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
