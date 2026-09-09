@@ -239,154 +239,72 @@ function describeWorkout(w) {
 }
 
 /* ---------------------------------------------------------------------- */
-/*  Local nutrition database (free, no API call needed for common foods)   */
+/*  Food search: a curated local index (values always per 100g/100ml) used  */
+/*  to power the search-and-pick flow. The deployed app backs this with a   */
+/*  live USDA FoodData Central lookup instead — see searchFoods() below.    */
 /* ---------------------------------------------------------------------- */
 
 const FOOD_DB = [
-  { names: ["egg", "eggs", "boiled egg", "fried egg", "scrambled egg", "scrambled eggs"], unit: "each", gramsEach: 50, cal: 78, p: 6.3, c: 0.6, f: 5.3 },
-  { names: ["rice", "white rice", "cooked rice", "steamed rice"], unit: "g100", cal: 130, p: 2.7, c: 28, f: 0.3 },
-  { names: ["brown rice"], unit: "g100", cal: 123, p: 2.6, c: 26, f: 1 },
-  { names: ["chicken breast", "chicken", "grilled chicken", "cooked chicken"], unit: "g100", cal: 165, p: 31, c: 0, f: 3.6 },
-  { names: ["milk", "whole milk"], unit: "ml100", cal: 61, p: 3.2, c: 4.8, f: 3.3 },
-  { names: ["skim milk", "low fat milk"], unit: "ml100", cal: 34, p: 3.4, c: 5, f: 0.1 },
-  { names: ["banana", "bananas"], unit: "each", gramsEach: 118, cal: 105, p: 1.3, c: 27, f: 0.4 },
-  { names: ["apple", "apples"], unit: "each", gramsEach: 182, cal: 95, p: 0.5, c: 25, f: 0.3 },
-  { names: ["bread", "white bread", "slice of bread", "toast"], unit: "each", gramsEach: 30, cal: 79, p: 2.7, c: 15, f: 1 },
-  { names: ["oats", "oatmeal", "rolled oats"], unit: "g100", cal: 389, p: 16.9, c: 66, f: 6.9 },
-  { names: ["salmon", "grilled salmon", "cooked salmon"], unit: "g100", cal: 208, p: 20, c: 0, f: 13 },
-  { names: ["broccoli"], unit: "g100", cal: 34, p: 2.8, c: 7, f: 0.4 },
-  { names: ["potato", "potatoes", "baked potato", "boiled potato"], unit: "g100", cal: 87, p: 1.9, c: 20, f: 0.1 },
-  { names: ["sweet potato"], unit: "g100", cal: 86, p: 1.6, c: 20, f: 0.1 },
-  { names: ["pasta", "cooked pasta", "spaghetti"], unit: "g100", cal: 158, p: 5.8, c: 31, f: 0.9 },
-  { names: ["yogurt", "plain yogurt"], unit: "g100", cal: 61, p: 3.5, c: 4.7, f: 3.3 },
-  { names: ["greek yogurt", "nonfat greek yogurt"], unit: "g100", cal: 59, p: 10, c: 3.6, f: 0.4 },
-  { names: ["cheese", "cheddar cheese", "cheddar"], unit: "g100", cal: 402, p: 25, c: 1.3, f: 33 },
-  { names: ["almonds"], unit: "g100", cal: 579, p: 21, c: 22, f: 50 },
-  { names: ["peanut butter"], unit: "g100", cal: 588, p: 25, c: 20, f: 50 },
-  { names: ["olive oil"], unit: "ml100", cal: 884, p: 0, c: 0, f: 100 },
-  { names: ["avocado", "avocados"], unit: "each", gramsEach: 150, cal: 240, p: 3, c: 13, f: 22 },
-  { names: ["orange", "oranges"], unit: "each", gramsEach: 131, cal: 62, p: 1.2, c: 15, f: 0.2 },
-  { names: ["tomato", "tomatoes"], unit: "each", gramsEach: 123, cal: 22, p: 1.1, c: 4.8, f: 0.2 },
-  { names: ["spinach"], unit: "g100", cal: 23, p: 2.9, c: 3.6, f: 0.4 },
-  { names: ["tuna", "canned tuna"], unit: "g100", cal: 132, p: 28, c: 0, f: 1.3 },
-  { names: ["beef", "ground beef", "lean beef"], unit: "g100", cal: 250, p: 26, c: 0, f: 17 },
-  { names: ["black coffee", "coffee"], unit: "each", gramsEach: 240, cal: 2, p: 0.3, c: 0, f: 0 },
-  { names: ["butter"], unit: "g100", cal: 717, p: 0.9, c: 0.1, f: 81 },
-  { names: ["honey"], unit: "g100", cal: 304, p: 0.3, c: 82, f: 0 },
-  { names: ["turkey breast", "turkey", "cooked turkey"], unit: "g100", cal: 135, p: 30, c: 0, f: 1 },
-  { names: ["shrimp", "prawns", "cooked shrimp"], unit: "g100", cal: 99, p: 24, c: 0.2, f: 0.3 },
-  { names: ["quinoa", "cooked quinoa"], unit: "g100", cal: 120, p: 4.4, c: 21.3, f: 1.9 },
-  { names: ["lentils", "cooked lentils"], unit: "g100", cal: 116, p: 9, c: 20, f: 0.4 },
-  { names: ["black beans", "cooked black beans"], unit: "g100", cal: 132, p: 8.9, c: 24, f: 0.5 },
-  { names: ["chickpeas", "cooked chickpeas", "garbanzo beans"], unit: "g100", cal: 164, p: 8.9, c: 27, f: 2.6 },
-  { names: ["whole wheat bread", "wholemeal bread"], unit: "each", gramsEach: 28, cal: 81, p: 4, c: 14, f: 1.1 },
-  { names: ["cottage cheese"], unit: "g100", cal: 98, p: 11, c: 3.4, f: 4.3 },
-  { names: ["whey protein", "protein powder", "protein shake"], unit: "each", gramsEach: 30, cal: 120, p: 24, c: 3, f: 1.5 },
+  { names: ["egg", "eggs", "boiled egg", "fried egg", "scrambled egg"], gramsEach: 50, cal: 156, p: 12.6, c: 1.2, f: 10.6 },
+  { names: ["rice", "white rice", "cooked rice", "steamed rice"], cal: 130, p: 2.7, c: 28, f: 0.3 },
+  { names: ["brown rice"], cal: 123, p: 2.6, c: 26, f: 1 },
+  { names: ["chicken breast", "chicken", "grilled chicken", "cooked chicken"], cal: 165, p: 31, c: 0, f: 3.6 },
+  { names: ["milk", "whole milk"], cal: 61, p: 3.2, c: 4.8, f: 3.3 },
+  { names: ["skim milk", "low fat milk"], cal: 34, p: 3.4, c: 5, f: 0.1 },
+  { names: ["banana", "bananas"], gramsEach: 118, cal: 89, p: 1.1, c: 22.8, f: 0.3 },
+  { names: ["apple", "apples"], gramsEach: 182, cal: 52, p: 0.3, c: 13.8, f: 0.2 },
+  { names: ["bread", "white bread", "slice of bread", "toast"], gramsEach: 30, cal: 265, p: 9, c: 49, f: 3.2 },
+  { names: ["oats", "oatmeal", "rolled oats"], cal: 389, p: 16.9, c: 66, f: 6.9 },
+  { names: ["salmon", "grilled salmon", "cooked salmon"], cal: 208, p: 20, c: 0, f: 13 },
+  { names: ["broccoli"], cal: 34, p: 2.8, c: 7, f: 0.4 },
+  { names: ["potato", "potatoes", "baked potato", "boiled potato"], cal: 87, p: 1.9, c: 20, f: 0.1 },
+  { names: ["sweet potato"], cal: 86, p: 1.6, c: 20, f: 0.1 },
+  { names: ["pasta", "cooked pasta", "spaghetti"], cal: 158, p: 5.8, c: 31, f: 0.9 },
+  { names: ["yogurt", "plain yogurt"], cal: 61, p: 3.5, c: 4.7, f: 3.3 },
+  { names: ["greek yogurt", "nonfat greek yogurt"], cal: 59, p: 10, c: 3.6, f: 0.4 },
+  { names: ["cheese", "cheddar cheese", "cheddar"], cal: 402, p: 25, c: 1.3, f: 33 },
+  { names: ["almonds"], cal: 579, p: 21, c: 22, f: 50 },
+  { names: ["peanut butter"], cal: 588, p: 25, c: 20, f: 50 },
+  { names: ["olive oil"], cal: 884, p: 0, c: 0, f: 100 },
+  { names: ["avocado", "avocados"], gramsEach: 150, cal: 160, p: 2, c: 8.5, f: 14.7 },
+  { names: ["orange", "oranges"], gramsEach: 131, cal: 47, p: 0.9, c: 11.8, f: 0.1 },
+  { names: ["tomato", "tomatoes"], gramsEach: 123, cal: 18, p: 0.9, c: 3.9, f: 0.2 },
+  { names: ["spinach"], cal: 23, p: 2.9, c: 3.6, f: 0.4 },
+  { names: ["tuna", "canned tuna"], cal: 132, p: 28, c: 0, f: 1.3 },
+  { names: ["beef", "ground beef", "lean beef"], cal: 250, p: 26, c: 0, f: 17 },
+  { names: ["black coffee", "coffee"], cal: 1, p: 0.1, c: 0, f: 0 },
+  { names: ["butter"], cal: 717, p: 0.9, c: 0.1, f: 81 },
+  { names: ["honey"], cal: 304, p: 0.3, c: 82, f: 0 },
+  { names: ["turkey breast", "turkey", "cooked turkey"], cal: 135, p: 30, c: 0, f: 1 },
+  { names: ["shrimp", "prawns", "cooked shrimp"], cal: 99, p: 24, c: 0.2, f: 0.3 },
+  { names: ["quinoa", "cooked quinoa"], cal: 120, p: 4.4, c: 21.3, f: 1.9 },
+  { names: ["lentils", "cooked lentils"], cal: 116, p: 9, c: 20, f: 0.4 },
+  { names: ["black beans", "cooked black beans"], cal: 132, p: 8.9, c: 24, f: 0.5 },
+  { names: ["chickpeas", "cooked chickpeas", "garbanzo beans"], cal: 164, p: 8.9, c: 27, f: 2.6 },
+  { names: ["whole wheat bread", "wholemeal bread"], gramsEach: 28, cal: 247, p: 13, c: 41, f: 3.5 },
+  { names: ["cottage cheese"], cal: 98, p: 11, c: 3.4, f: 4.3 },
+  { names: ["whey protein", "protein powder", "protein shake"], gramsEach: 30, cal: 400, p: 80, c: 10, f: 5 },
 ];
-const UNIT_TO_GRAMS = { cup: 240, tbsp: 15, tablespoon: 15, tsp: 5, teaspoon: 5, oz: 28, ounce: 28, slice: 30 };
 
 function normName(s) {
   return s.toLowerCase().trim().replace(/[.,!]/g, "");
 }
-// Splits on commas / semicolons / " and " / newlines, but never splits on a
-// comma that's inside parentheses — so "Chicken Breast (178g, cooked)" stays
-// one segment instead of being torn into "Chicken Breast (178g" + "cooked)".
-function splitFoodSegments(text) {
-  const segments = [];
-  let depth = 0;
-  let buf = "";
-  const flush = () => { if (buf.trim()) segments.push(buf.trim()); buf = ""; };
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    if (ch === "(") { depth++; buf += ch; i++; continue; }
-    if (ch === ")") { depth = Math.max(0, depth - 1); buf += ch; i++; continue; }
-    if (depth === 0) {
-      if (ch === "," || ch === ";" || ch === "\n") { flush(); i++; continue; }
-      if (text.slice(i, i + 5).toLowerCase() === " and ") { flush(); i += 5; continue; }
-    }
-    buf += ch;
-    i++;
-  }
-  flush();
-  return segments;
-}
-const QTY_UNIT_RE = /(\d+(?:\.\d+)?)\s*(g|grams?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|slices?)\b/i;
-// Finds the quantity+unit anywhere in the text (start, middle, or inside
-// parentheses — e.g. "Basmati Rice (300g, cooked)"), then strips it plus any
-// parenthetical notes to isolate the plain food name for matching.
-function parseSegmentQuantity(segment) {
-  let qty = null;
-  let unit = null;
-  const withUnit = segment.match(QTY_UNIT_RE);
-  if (withUnit) {
-    qty = parseFloat(withUnit[1]);
-    unit = withUnit[2].toLowerCase();
-  } else {
-    const bare = segment.match(/^\s*(\d+(?:\.\d+)?)\b/);
-    if (bare) qty = parseFloat(bare[1]);
-  }
-  let rest = segment
-    .replace(/\([^)]*\)/g, " ")
-    .replace(QTY_UNIT_RE, " ")
-    .replace(/\bof\b/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!rest) rest = segment.replace(/\([^)]*\)/g, " ").trim();
-  return { qty, unit, rest };
-}
-function toGrams(qty, unit) {
-  if (!unit) return qty;
-  const u = unit.replace(/s$/, "");
-  if (u === "g" || u === "gram" || u === "ml" || u === "milliliter") return qty;
-  if (UNIT_TO_GRAMS[u]) return qty * UNIT_TO_GRAMS[u];
-  return qty;
-}
-function matchFoodDB(segment) {
-  const { qty, unit, rest } = parseSegmentQuantity(segment);
-  const name = normName(rest || segment);
-  if (!name) return null;
 
-  // Prefer an exact alias match over a partial/substring one, and among
-  // partial matches prefer the longest alias — otherwise "skim milk" or
-  // "brown rice" would silently resolve to the generic "milk"/"rice" entry
-  // just because that shorter entry happens to come first in the list.
-  let exactEntry = null;
-  let bestPartial = null;
-  for (const entry of FOOD_DB) {
-    for (const n of entry.names) {
-      if (name === n) { exactEntry = entry; break; }
-      if ((name.includes(n) || n.includes(name)) && (!bestPartial || n.length > bestPartial.alias.length)) {
-        bestPartial = { entry, alias: n };
-      }
-    }
-    if (exactEntry) break;
+// Calls the deployed backend (api/food-search.js), which proxies USDA
+// FoodData Central — the full 400k+ generic-food database, not just the
+// curated local list the in-chat demo version uses.
+async function searchFoods(query) {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  let res;
+  try {
+    res = await fetch(`/api/food-search?q=${encodeURIComponent(q)}`);
+  } catch (e) {
+    return [];
   }
-  const entry = exactEntry || bestPartial?.entry;
-  if (!entry) return null;
-  let multiplier;
-  if (entry.unit === "each") {
-    if (qty != null && unit) {
-      // A weight/volume was explicitly given (e.g. "150g tomato") — that's
-      // 150 grams of tomato, not 150 whole tomatoes. Convert through the
-      // food's average each-weight instead of using the number as a count.
-      const grams = toGrams(qty, unit);
-      multiplier = entry.gramsEach ? grams / entry.gramsEach : qty;
-    } else {
-      multiplier = qty != null ? qty : 1;
-    }
-  } else {
-    const grams = qty != null ? toGrams(qty, unit) : 100;
-    multiplier = grams / 100;
-  }
-  const label = entry.names[0];
-  return {
-    name: label.charAt(0).toUpperCase() + label.slice(1),
-    calories: Math.max(0, Math.round(entry.cal * multiplier)),
-    protein: Math.max(0, Math.round(entry.p * multiplier * 10) / 10),
-    carbs: Math.max(0, Math.round(entry.c * multiplier * 10) / 10),
-    fat: Math.max(0, Math.round(entry.f * multiplier * 10) / 10),
-  };
+  if (!res.ok) return [];
+  const json = await res.json().catch(() => ({ results: [] }));
+  return json.results || [];
 }
 
 /* ---------------------------------------------------------------------- */
@@ -413,29 +331,23 @@ async function callClaude(system, userText, maxTokens = 800) {
   return (json.text || "").trim();
 }
 
-// Local DB first (free, instant); Claude is only called as a fallback for
-// whatever it couldn't recognize, and only for that leftover text.
+// AI fallback for vague/whole-meal descriptions the search box can't cleanly
+// resolve to one food (e.g. "chicken shawarma plate", "a bowl of pho").
+// This is the ONLY remaining use of the LLM for nutrition estimation — it
+// runs automatically when the person submits free text instead of picking a
+// search result, with no separate "AI estimate" button to press.
 async function estimateNutrition(text) {
-  const segments = splitFoodSegments(text);
-  const matched = [];
-  const unmatched = [];
-  segments.forEach((seg) => {
-    const hit = matchFoodDB(seg);
-    if (hit) matched.push(hit);
-    else unmatched.push(seg);
-  });
-  if (unmatched.length === 0) return matched;
-
   const system =
     "You are a careful nutrition-estimation engine inside a food-logging app. " +
-    "Given a free-text description of food or drink someone ate, respond with ONLY raw JSON " +
+    "Given a free-text description of a meal, snack, or dish (often a prepared/composite " +
+    "dish rather than a single raw ingredient), respond with ONLY raw JSON " +
     "(no markdown fences, no prose, no explanation) in exactly this shape: " +
     '{"items":[{"name":"string","calories":number,"protein_g":number,"carbs_g":number,"fat_g":number}]}. ' +
-    "Split the description into distinct food items when reasonable. Use typical nutrition data and " +
-    "any stated or implied portion sizes to give sensible estimates. Numbers only, no units inside numbers. " +
+    "Split the description into distinct components when that's clearer (e.g. a plate with rice, meat, " +
+    "and salad), otherwise return it as one item. Use typical nutrition data and any stated or implied " +
+    "portion sizes to give sensible estimates. Numbers only, no units inside numbers. " +
     "If the text isn't food at all, return {\"items\":[]}.";
-  const textForApi = matched.length > 0 ? unmatched.join(", ") : text;
-  const raw = await callClaude(system, textForApi, 800);
+  const raw = await callClaude(system, text, 800);
   const clean = raw.replace(/```json|```/g, "").trim();
   let parsed;
   try {
@@ -444,14 +356,13 @@ async function estimateNutrition(text) {
     throw new Error("the response wasn't valid JSON — try rephrasing what you ate.");
   }
   if (!parsed.items) throw new Error("unexpected response shape from the model.");
-  const apiItems = parsed.items.map((it) => ({
+  return parsed.items.map((it) => ({
     name: String(it.name || "Item").slice(0, 80),
     calories: Math.max(0, Math.round(Number(it.calories) || 0)),
     protein: Math.max(0, Math.round(Number(it.protein_g) || 0)),
     carbs: Math.max(0, Math.round(Number(it.carbs_g) || 0)),
     fat: Math.max(0, Math.round(Number(it.fat_g) || 0)),
   }));
-  return [...matched, ...apiItems];
 }
 
 /* ---------------------------------------------------------------------- */
@@ -810,16 +721,79 @@ function WeightWidget({ dayKey, day, updateDay, showToast }) {
 function MealLogger({ dayKey, day, updateDay, showToast }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [portion, setPortion] = useState("100");
   const submittingRef = useRef(false); // synchronous guard — React state updates are batched/async, so a rapid double-fire (double-tap, duplicate event, etc.) can read stale `busy` before a re-render happens. A ref updates instantly and closes that race condition.
+  const searchTimerRef = useRef(null);
+
   useEffect(() => {
-    // Clear the draft text when navigating to a different day, without
+    // Reset everything when navigating to a different day, without
     // unmounting/remounting the component (that remount-on-key-change was
     // what caused Safari to occasionally leave a stale, non-interactive
     // painted frame behind when rapidly tapping the day arrows).
     setText("");
+    setResults([]);
+    setSelected(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayKey]);
-  async function handleLog() {
+
+  useEffect(() => {
+    if (selected) return; // portion picker is open — don't keep searching underneath it
+    clearTimeout(searchTimerRef.current);
+    const q = text.trim();
+    if (q.length < 2) {
+      setResults([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await searchFoods(q);
+        setResults(r);
+      } catch (e) {
+        setResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(searchTimerRef.current);
+  }, [text, selected]);
+
+  function pickResult(r) {
+    setSelected(r);
+    setPortion(r.gramsEach ? String(r.gramsEach) : "100");
+  }
+
+  function addSelectedPortion() {
+    const grams = Math.max(0, parseFloat(portion) || 0);
+    if (grams <= 0) {
+      showToast("Enter a portion amount first.", "warn");
+      return;
+    }
+    const mult = grams / 100;
+    const entry = {
+      id: uid(),
+      time: timeNow(),
+      name: selected.name,
+      calories: Math.max(0, Math.round(selected.cal * mult)),
+      protein: Math.max(0, round1(selected.protein * mult)),
+      carbs: Math.max(0, round1(selected.carbs * mult)),
+      fat: Math.max(0, round1(selected.fat * mult)),
+    };
+    updateDay((d) => {
+      const tail = d.entries.slice(-1);
+      const isDuplicate = tail.length === 1 && tail[0].name === entry.name && tail[0].calories === entry.calories && tail[0].protein === entry.protein && tail[0].carbs === entry.carbs && tail[0].fat === entry.fat;
+      return isDuplicate ? d : { ...d, entries: [...d.entries, entry] };
+    });
+    showToast(`Logged ${entry.name} · ${entry.calories} kcal`, "good");
+    setText("");
+    setResults([]);
+    setSelected(null);
+  }
+
+  async function handleLogFreeform() {
     const trimmed = text.trim();
     if (!trimmed || submittingRef.current) return;
     submittingRef.current = true;
@@ -845,6 +819,7 @@ function MealLogger({ dayKey, day, updateDay, showToast }) {
         const kcal = items.reduce((s, i) => s + i.calories, 0);
         showToast(`Logged ${items.length > 1 ? `${items.length} items` : items[0].name} · ${kcal} kcal`, "good");
         setText("");
+        setResults([]);
       }
     } catch (e) {
       showToast(e?.message ? `Couldn't log that meal — ${e.message}` : "Couldn't estimate that meal — check your connection and try again.", "warn");
@@ -853,11 +828,47 @@ function MealLogger({ dayKey, day, updateDay, showToast }) {
       setBusy(false);
     }
   }
+
+  if (selected) {
+    const grams = Math.max(0, parseFloat(portion) || 0);
+    const mult = grams / 100;
+    const approxEach = selected.gramsEach ? Math.round((grams / selected.gramsEach) * 10) / 10 : null;
+    return (
+      <div className="card log-card">
+        <button className="link-btn portion-back" onClick={() => setSelected(null)}><ChevronLeft size={14} /> Back to results</button>
+        <div className="portion-food-name">{selected.name}</div>
+        <div className="portion-input-row">
+          <input type="number" inputMode="decimal" className="text-input" value={portion} onChange={(e) => setPortion(e.target.value)} autoFocus />
+          <span className="goal-field-unit">g</span>
+        </div>
+        {approxEach != null && <span className="goal-field-hint">≈ {approxEach} {selected.name.toLowerCase()}{approxEach === 1 ? "" : "s"}</span>}
+        <div className="portion-preview">
+          <span className="portion-preview-kcal">{Math.round(selected.cal * mult)} kcal</span>
+          <span>{round1(selected.protein * mult)}g protein · {round1(selected.carbs * mult)}g carbs · {round1(selected.fat * mult)}g fat</span>
+        </div>
+        <button className="btn-primary" onClick={addSelectedPortion}><Plus size={16} /> Add to log</button>
+      </div>
+    );
+  }
+
   return (
     <div className="card log-card">
       <div className="card-title"><UtensilsCrossed size={15} /> Log a meal or snack</div>
-      <textarea className="text-area" placeholder="e.g. two scrambled eggs, a slice of toast, and a black coffee" value={text} onChange={(e) => setText(e.target.value)} rows={3} />
-      <button className="btn-primary" onClick={handleLog} disabled={busy || !text.trim()}>
+      <textarea className="text-area" placeholder="Search a food (e.g. chicken breast) — or describe a whole meal like 'chicken shawarma plate'" value={text} onChange={(e) => setText(e.target.value)} rows={2} />
+      {searching && <div className="food-searching"><Loader2 size={13} className="spin" /> Searching…</div>}
+      {!searching && results.length > 0 && (
+        <ul className="food-results">
+          {results.map((r) => (
+            <li key={r.id}>
+              <button onClick={() => pickResult(r)}>
+                <span className="food-result-name">{r.name}</span>
+                <span className="food-result-kcal">{Math.round(r.cal)} kcal/100g</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button className="btn-primary" onClick={handleLogFreeform} disabled={busy || !text.trim()}>
         {busy ? <><Loader2 size={16} className="spin" /> Estimating…</> : <><Plus size={16} /> Log it</>}
       </button>
     </div>
@@ -1839,6 +1850,23 @@ const CSS = `
 
 .text-input { flex:1; border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; font-size: 13px; background: #F7F9F2; color: var(--ink); width: 100%; }
 .text-area { width: 100%; border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px; font-size: 13.5px; background: #F7F9F2; color: var(--ink); resize: vertical; min-height: 64px; line-height: 1.5; margin-bottom: 12px; }
+
+.food-searching { display:flex; align-items:center; gap: 7px; font-size: 12px; color: var(--ink-soft); margin: -4px 0 12px; }
+.food-results { list-style:none; margin: -4px 0 14px; padding:0; display:flex; flex-direction:column; gap: 6px; max-height: 260px; overflow-y:auto; }
+.food-results li button { width:100%; display:flex; align-items:center; justify-content:space-between; gap: 10px; background:#F7F9F2; border:1px solid var(--border); border-radius: 12px; padding: 10px 12px; font-size: 13px; text-align:left; transition: background 0.15s ease; }
+.food-results li button:active { background: #EEF1E6; }
+.food-result-name { font-weight: 600; color: var(--ink); }
+.food-result-kcal { color: var(--ink-soft); font-size: 11.5px; white-space:nowrap; font-variant-numeric: tabular-nums; }
+
+.portion-back { margin-bottom: 12px; }
+.portion-food-name { font-family:'Fraunces', serif; font-weight: 600; font-size: 18px; margin-bottom: 12px; }
+.portion-input-row { display:flex; align-items:center; border: 1px solid var(--border); border-radius: 12px; background: #F7F9F2; overflow:hidden; margin-bottom: 4px; }
+.portion-input-row input { flex:1; border:none; background:transparent; padding: 12px; font-size: 18px; font-weight: 700; color: var(--ink); }
+.portion-input-row input:focus { outline: none; }
+.portion-preview { background: #EEF1E6; border-radius: 12px; padding: 12px 14px; margin: 14px 0; display:flex; flex-direction:column; gap: 4px; }
+.portion-preview-kcal { font-family:'Fraunces', serif; font-weight: 700; font-size: 20px; color: var(--gold); }
+.portion-preview span:last-child { font-size: 12px; color: var(--ink-soft); }
+
 
 .btn-primary { display:flex; align-items:center; justify-content:center; gap: 7px; background: var(--ink); color: #F4F6EE; border: none; border-radius: 13px; padding: 12px 16px; font-size: 13.5px; font-weight: 700; width: 100%; transition: transform 0.15s ease, opacity 0.15s ease; }
 .btn-primary:disabled { opacity: 0.45; cursor: default; }

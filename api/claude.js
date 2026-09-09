@@ -2,11 +2,13 @@
 // Keeps ANTHROPIC_API_KEY on the server — it is never sent to the browser.
 // The frontend calls POST /api/claude with { system, userText, maxTokens }.
 //
-// This is only hit as a fallback when a logged food isn't found in the app's
-// local nutrition database (src/App.jsx's FOOD_DB) — most common foods never
-// reach this endpoint at all. Because it's just extracting structured
-// numbers from short text, it runs on Haiku 4.5 rather than a larger model:
-// materially cheaper/faster with no meaningful accuracy loss for this task.
+// This only runs when the person types a free-text meal description instead
+// of picking a result from the food search (api/food-search.js, backed by
+// USDA FoodData Central) — e.g. "chicken shawarma plate". Precise single
+// foods never reach an LLM at all now; they're looked up directly. Because
+// this is just extracting structured numbers from short text, it runs on
+// Haiku 4.5 rather than a larger model: materially cheaper/faster with no
+// meaningful accuracy loss for this task.
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
