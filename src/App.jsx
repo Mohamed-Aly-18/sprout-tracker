@@ -270,7 +270,7 @@ const FOOD_DB = [
   { names: ["orange", "oranges"], gramsEach: 131, cal: 47, p: 0.9, c: 11.8, f: 0.1 },
   { names: ["tomato", "tomatoes"], gramsEach: 123, cal: 18, p: 0.9, c: 3.9, f: 0.2 },
   { names: ["spinach"], cal: 23, p: 2.9, c: 3.6, f: 0.4 },
-  { names: ["tuna", "canned tuna"], cal: 132, p: 28, c: 0, f: 1.3 },
+  { names: ["tuna", "canned tuna", "tuna in water"], cal: 116, p: 25.5, c: 0, f: 0.8 },
   { names: ["beef", "ground beef", "lean beef"], cal: 250, p: 26, c: 0, f: 17 },
   { names: ["black coffee", "coffee"], cal: 1, p: 0.1, c: 0, f: 0 },
   { names: ["butter"], cal: 717, p: 0.9, c: 0.1, f: 81 },
@@ -948,8 +948,7 @@ function WorkoutLogger({ dayKey, day, updateDay, showToast }) {
     updateDay((d) => ({ ...d, workouts: d.workouts.filter((w) => w.id !== id) }));
   }
   return (
-    <div className="card">
-      <div className="card-title"><Dumbbell size={15} /> Log a workout</div>
+    <>
       <WorkoutForm dayKey={dayKey} onAdd={handleAdd} />
       {day.workouts.length > 0 && (
         <ul className="workout-entry-list">
@@ -966,6 +965,19 @@ function WorkoutLogger({ dayKey, day, updateDay, showToast }) {
           })}
         </ul>
       )}
+    </>
+  );
+}
+
+function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="card collapsible">
+      <button className="collapsible-header" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="card-title collapsible-title"><Icon size={15} /> {title}</span>
+        <ChevronRight size={16} className={`collapsible-chevron ${open ? "open" : ""}`} />
+      </button>
+      {open && <div className="collapsible-body">{children}</div>}
     </div>
   );
 }
@@ -1457,21 +1469,11 @@ function MonthlyTab({ data, showToast }) {
     );
   }
 
-  const overallAvg = (fn) => Math.round(buckets.reduce((s, b) => s + fn(b), 0) / buckets.length);
   const weighInBuckets = buckets.filter((b) => b.weightChange != null);
   const totalWeightChange = weighInBuckets.length ? Math.round(weighInBuckets.reduce((s, b) => s + b.weightChange, 0) * 10) / 10 : null;
 
   return (
     <div className="tab-panel">
-      <div className="stat-grid stat-grid-wide">
-        <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgCalories).toLocaleString()}</span><span className="stat-label">avg kcal/day</span></div>
-        <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgProtein)}g</span><span className="stat-label">avg protein</span></div>
-        <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgCarbs)}g</span><span className="stat-label">avg carbs</span></div>
-        <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgFat)}g</span><span className="stat-label">avg fat</span></div>
-        <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgWater).toLocaleString()}</span><span className="stat-label">avg water ml</span></div>
-        <div className="stat-box"><span className="stat-num">{totalWeightChange != null ? `${totalWeightChange > 0 ? "+" : ""}${totalWeightChange}kg` : "—"}</span><span className="stat-label">weight change</span></div>
-      </div>
-
       <div className="card">
         <div className="card-title"><Scale size={15} /> Weight by week</div>
         {weighInBuckets.length > 0 ? (
@@ -1564,51 +1566,55 @@ function WorkoutTab({ data, setData, showToast }) {
         <button className="icon-btn" onClick={() => setOffset((o) => Math.min(0, o + 1))} disabled={offset === 0} aria-label="Next day"><ChevronRight size={18} /></button>
       </div>
 
-      <WorkoutLogger dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <CollapsibleSection title="Today" icon={Dumbbell} defaultOpen>
+        <WorkoutLogger dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
+      </CollapsibleSection>
 
-      <div className="stat-grid">
-        <div className="stat-box"><span className="stat-num">{weekSessions}</span><span className="stat-label">sessions this week</span></div>
-        <div className="stat-box"><span className="stat-num">{weekActiveDays}/7</span><span className="stat-label">active days</span></div>
-        <div className="stat-box"><span className="stat-num">{monthSessions}</span><span className="stat-label">sessions this month</span></div>
-      </div>
-
-      {(() => {
-        const trainingRows = [...rows].reverse().filter((r) => r.workouts.length > 0);
-        return (
-          <div className="card">
-            <div className="card-title"><Calendar size={15} /> Training log, this week</div>
-            {trainingRows.length === 0 ? (
-              <p className="tip-placeholder">No workouts logged this week yet — use the form above to add one.</p>
-            ) : (
-              <div className="training-log">
-                {trainingRows.map((r) => {
-                  const rIsToday = r.key === todayKey();
-                  return (
-                    <div key={r.key} className="training-log-day">
-                      <div className="training-log-day-header">
-                        <span>{rIsToday ? "Today" : `${DOW[r.date.getDay()]}, ${MONTHS[r.date.getMonth()]} ${r.date.getDate()}`}</span>
-                        <span className="training-log-count">{r.workouts.length} session{r.workouts.length > 1 ? "s" : ""}</span>
-                      </div>
-                      <ul className="training-log-exercises">
-                        {r.workouts.map((w) => {
-                          const meta = WORKOUT_TYPES.find((t) => t.value === w.type);
-                          const Icon = meta?.icon || Dumbbell;
-                          return (
-                            <li key={w.id}>
-                              <Icon size={13} />
-                              <span>{describeWorkout(w)}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
+      <CollapsibleSection title="This week" icon={Calendar} defaultOpen={false}>
+        <div className="stat-grid">
+          <div className="stat-box"><span className="stat-num">{weekSessions}</span><span className="stat-label">sessions this week</span></div>
+          <div className="stat-box"><span className="stat-num">{weekActiveDays}/7</span><span className="stat-label">active days</span></div>
+        </div>
+        {(() => {
+          const trainingRows = [...rows].reverse().filter((r) => r.workouts.length > 0);
+          return trainingRows.length === 0 ? (
+            <p className="tip-placeholder collapsible-tip">No workouts logged this week yet — use the form above to add one.</p>
+          ) : (
+            <div className="training-log collapsible-tip">
+              {trainingRows.map((r) => {
+                const rIsToday = r.key === todayKey();
+                return (
+                  <div key={r.key} className="training-log-day">
+                    <div className="training-log-day-header">
+                      <span>{rIsToday ? "Today" : `${DOW[r.date.getDay()]}, ${MONTHS[r.date.getMonth()]} ${r.date.getDate()}`}</span>
+                      <span className="training-log-count">{r.workouts.length} session{r.workouts.length > 1 ? "s" : ""}</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })()}
+                    <ul className="training-log-exercises">
+                      {r.workouts.map((w) => {
+                        const meta = WORKOUT_TYPES.find((t) => t.value === w.type);
+                        const Icon = meta?.icon || Dumbbell;
+                        return (
+                          <li key={w.id}>
+                            <Icon size={13} />
+                            <span>{describeWorkout(w)}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </CollapsibleSection>
+
+      <CollapsibleSection title="This month" icon={Calendar} defaultOpen={false}>
+        <div className="stat-grid">
+          <div className="stat-box"><span className="stat-num">{monthSessions}</span><span className="stat-label">sessions this month</span></div>
+          <div className="stat-box"><span className="stat-num">{buckets.filter((b) => b.workoutDays > 0).length}/{buckets.length || 0}</span><span className="stat-label">active weeks</span></div>
+        </div>
+      </CollapsibleSection>
     </div>
   );
 }
@@ -1786,6 +1792,14 @@ const CSS = `
 .card-title { display:flex; align-items:center; gap:7px; font-size: 13px; font-weight: 700; color: var(--ink-soft); margin-bottom: 12px; }
 .card-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px; }
 .card-title-row .card-title { margin-bottom: 0; }
+
+.collapsible { padding: 0; overflow: hidden; }
+.collapsible-header { width:100%; display:flex; align-items:center; justify-content:space-between; padding: 18px; background: none; border:none; text-align:left; }
+.collapsible-title { margin-bottom: 0; }
+.collapsible-chevron { color: var(--ink-soft); transition: transform 0.25s cubic-bezier(.25,.9,.35,1); flex-shrink:0; }
+.collapsible-chevron.open { transform: rotate(90deg); }
+.collapsible-body { padding: 0 18px 18px; animation: fadein 0.2s ease; }
+.collapsible-tip { margin-top: 14px; }
 
 .hero-card { display:flex; flex-direction:column; align-items:center; gap: 18px; }
 .ring-wrap { position: relative; width: 180px; height: 180px; }
