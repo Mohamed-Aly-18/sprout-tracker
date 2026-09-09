@@ -765,9 +765,16 @@ function WaterWidget({ ml, goal, onQuickAdd, onCustomAdd }) {
   );
 }
 
-function WeightWidget({ day, updateDay, showToast }) {
+function WeightWidget({ dayKey, day, updateDay, showToast }) {
   const [weightInput, setWeightInput] = useState(day.weight != null ? String(day.weight) : "");
   const [editing, setEditing] = useState(day.weight == null);
+  useEffect(() => {
+    // Reset local UI state when navigating to a different day, without
+    // unmounting/remounting the component itself.
+    setWeightInput(day.weight != null ? String(day.weight) : "");
+    setEditing(day.weight == null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayKey]);
   function handleSave() {
     const val = parseFloat(weightInput);
     if (!val || val <= 0) { showToast("Enter a valid weight first.", "warn"); return; }
@@ -800,10 +807,18 @@ function WeightWidget({ day, updateDay, showToast }) {
   );
 }
 
-function MealLogger({ day, updateDay, showToast }) {
+function MealLogger({ dayKey, day, updateDay, showToast }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const submittingRef = useRef(false); // synchronous guard — React state updates are batched/async, so a rapid double-fire (double-tap, duplicate event, etc.) can read stale `busy` before a re-render happens. A ref updates instantly and closes that race condition.
+  useEffect(() => {
+    // Clear the draft text when navigating to a different day, without
+    // unmounting/remounting the component (that remount-on-key-change was
+    // what caused Safari to occasionally leave a stale, non-interactive
+    // painted frame behind when rapidly tapping the day arrows).
+    setText("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayKey]);
   async function handleLog() {
     const trimmed = text.trim();
     if (!trimmed || submittingRef.current) return;
@@ -860,9 +875,14 @@ function WorkoutStatusBadge({ day, onOpenWorkout }) {
   );
 }
 
-function WorkoutForm({ onAdd }) {
+function WorkoutForm({ dayKey, onAdd }) {
   const [type, setType] = useState("weights");
   const [fields, setFields] = useState({});
+  useEffect(() => {
+    setType("weights");
+    setFields({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayKey]);
   function set(k, v) { setFields((f) => ({ ...f, [k]: v })); }
   function handleAdd() {
     if (type === "weights" && !fields.exercise) return;
@@ -908,7 +928,7 @@ function WorkoutForm({ onAdd }) {
     </div>
   );
 }
-function WorkoutLogger({ day, updateDay, showToast }) {
+function WorkoutLogger({ dayKey, day, updateDay, showToast }) {
   function handleAdd(entry) {
     updateDay((d) => ({ ...d, workouts: [...d.workouts, entry] }));
     showToast("Workout logged", "good");
@@ -919,7 +939,7 @@ function WorkoutLogger({ day, updateDay, showToast }) {
   return (
     <div className="card">
       <div className="card-title"><Dumbbell size={15} /> Log a workout</div>
-      <WorkoutForm onAdd={handleAdd} />
+      <WorkoutForm dayKey={dayKey} onAdd={handleAdd} />
       {day.workouts.length > 0 && (
         <ul className="workout-entry-list">
           {day.workouts.map((w) => {
@@ -1154,11 +1174,11 @@ function TodayTab({ data, setData, showToast, goWorkout, onOpenCustomize }) {
         onCustomAdd={(amt) => { updateDay((d) => ({ ...d, water: d.water + amt })); showToast(`+${amt} ml logged`, "good"); }}
       />
 
-      <WeightWidget key={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <WeightWidget dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
 
       <WorkoutStatusBadge day={day} onOpenWorkout={goWorkout} />
 
-      <MealLogger key={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <MealLogger dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
 
     </div>
   );
@@ -1228,14 +1248,14 @@ function LogTab({ data, setData, showToast }) {
 
       <button className="btn-ghost btn-small btn-share-day" onClick={handleShareDay}><Share2 size={14} /> Share this day</button>
 
-      <MealLogger key={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <MealLogger dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
       <WaterWidget
         ml={day.water}
         goal={data.profile.waterGoal}
         onQuickAdd={(amt) => { updateDay((dd) => ({ ...dd, water: dd.water + amt })); showToast(`+${formatMl(amt)} logged`, "good"); }}
         onCustomAdd={(amt) => { updateDay((dd) => ({ ...dd, water: dd.water + amt })); showToast(`+${amt} ml logged`, "good"); }}
       />
-      <WeightWidget key={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <WeightWidget dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
 
       {day.entries.length === 0 ? (
         <div className="empty-state">
@@ -1534,7 +1554,7 @@ function WorkoutTab({ data, setData, showToast }) {
         <button className="icon-btn" onClick={() => setOffset((o) => Math.min(0, o + 1))} disabled={offset === 0} aria-label="Next day"><ChevronRight size={18} /></button>
       </div>
 
-      <WorkoutLogger key={key} day={day} updateDay={updateDay} showToast={showToast} />
+      <WorkoutLogger dayKey={key} day={day} updateDay={updateDay} showToast={showToast} />
 
       <div className="stat-grid">
         <div className="stat-box"><span className="stat-num">{weekSessions}</span><span className="stat-label">sessions this week</span></div>
