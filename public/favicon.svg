@@ -1,8 +1,10 @@
 <svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="112" fill="#202B22"/>
-  <g transform="translate(256,266) rotate(45)">
-    <ellipse cx="0" cy="0" rx="148" ry="92" fill="#D9A441"/>
-    <line x1="-140" y1="0" x2="140" y2="0" stroke="#202B22" stroke-width="9" stroke-linecap="round"/>
+  <g stroke="#D9A441" stroke-linecap="round">
+    <line x1="128" y1="256" x2="384" y2="256" stroke-width="26"/>
+    <rect x="96" y="196" width="40" height="120" rx="14" fill="#D9A441" stroke="none"/>
+    <rect x="376" y="196" width="40" height="120" rx="14" fill="#D9A441" stroke="none"/>
+    <rect x="62" y="216" width="26" height="80" rx="10" fill="#D9A441" stroke="none"/>
+    <rect x="424" y="216" width="26" height="80" rx="10" fill="#D9A441" stroke="none"/>
   </g>
-  <line x1="256" y1="358" x2="256" y2="392" stroke="#D9A441" stroke-width="14" stroke-linecap="round"/>
 </svg>
