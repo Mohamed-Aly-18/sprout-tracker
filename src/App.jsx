@@ -5,7 +5,7 @@ import {
   Scale, Dumbbell, User, SlidersHorizontal, Bike, Activity, Calendar, Pencil,
 } from "lucide-react";
 import {
-  ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line, BarChart, Bar,
+  ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line,
 } from "recharts";
 import { storage } from "./storage.js";
 
@@ -84,8 +84,11 @@ function normalizeDay(day) {
 function getDay(data, key) {
   return normalizeDay(data.days[key] || emptyDay());
 }
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
 function dayTotals(day) {
-  return day.entries.reduce(
+  const raw = day.entries.reduce(
     (acc, e) => ({
       calories: acc.calories + (e.calories || 0),
       protein: acc.protein + (e.protein || 0),
@@ -94,6 +97,12 @@ function dayTotals(day) {
     }),
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
+  return {
+    calories: Math.round(raw.calories),
+    protein: round1(raw.protein),
+    carbs: round1(raw.carbs),
+    fat: round1(raw.fat),
+  };
 }
 function weekRows(data, numDays = 7) {
   const keys = [];
@@ -106,6 +115,15 @@ function weekRows(data, numDays = 7) {
 }
 // Buckets every logged day (from the first day with any activity, up to
 // today) into 7-day windows for the Monthly view.
+function firstActiveKey(data) {
+  const keys = Object.keys(data.days || {})
+    .filter((k) => {
+      const d = getDay(data, k);
+      return d.entries.length > 0 || d.water > 0 || d.weight != null || d.workouts.length > 0;
+    })
+    .sort();
+  return keys.length ? keys[0] : null;
+}
 function monthlyBuckets(data) {
   const activeKeys = Object.keys(data.days || {})
     .filter((k) => {
@@ -255,19 +273,67 @@ const FOOD_DB = [
   { names: ["black coffee", "coffee"], unit: "each", cal: 2, p: 0.3, c: 0, f: 0 },
   { names: ["butter"], unit: "g100", cal: 717, p: 0.9, c: 0.1, f: 81 },
   { names: ["honey"], unit: "g100", cal: 304, p: 0.3, c: 82, f: 0 },
+  { names: ["turkey breast", "turkey", "cooked turkey"], unit: "g100", cal: 135, p: 30, c: 0, f: 1 },
+  { names: ["shrimp", "prawns", "cooked shrimp"], unit: "g100", cal: 99, p: 24, c: 0.2, f: 0.3 },
+  { names: ["quinoa", "cooked quinoa"], unit: "g100", cal: 120, p: 4.4, c: 21.3, f: 1.9 },
+  { names: ["lentils", "cooked lentils"], unit: "g100", cal: 116, p: 9, c: 20, f: 0.4 },
+  { names: ["black beans", "cooked black beans"], unit: "g100", cal: 132, p: 8.9, c: 24, f: 0.5 },
+  { names: ["chickpeas", "cooked chickpeas", "garbanzo beans"], unit: "g100", cal: 164, p: 8.9, c: 27, f: 2.6 },
+  { names: ["whole wheat bread", "wholemeal bread"], unit: "each", cal: 81, p: 4, c: 14, f: 1.1 },
+  { names: ["cottage cheese"], unit: "g100", cal: 98, p: 11, c: 3.4, f: 4.3 },
+  { names: ["whey protein", "protein powder", "protein shake"], unit: "each", cal: 120, p: 24, c: 3, f: 1.5 },
 ];
 const UNIT_TO_GRAMS = { cup: 240, tbsp: 15, tablespoon: 15, tsp: 5, teaspoon: 5, oz: 28, ounce: 28, slice: 30 };
 
 function normName(s) {
   return s.toLowerCase().trim().replace(/[.,!]/g, "");
 }
+// Splits on commas / semicolons / " and " / newlines, but never splits on a
+// comma that's inside parentheses — so "Chicken Breast (178g, cooked)" stays
+// one segment instead of being torn into "Chicken Breast (178g" + "cooked)".
 function splitFoodSegments(text) {
-  return text.split(/,| and |;|\n/i).map((s) => s.trim()).filter(Boolean);
+  const segments = [];
+  let depth = 0;
+  let buf = "";
+  const flush = () => { if (buf.trim()) segments.push(buf.trim()); buf = ""; };
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "(") { depth++; buf += ch; i++; continue; }
+    if (ch === ")") { depth = Math.max(0, depth - 1); buf += ch; i++; continue; }
+    if (depth === 0) {
+      if (ch === "," || ch === ";" || ch === "\n") { flush(); i++; continue; }
+      if (text.slice(i, i + 5).toLowerCase() === " and ") { flush(); i += 5; continue; }
+    }
+    buf += ch;
+    i++;
+  }
+  flush();
+  return segments;
 }
+const QTY_UNIT_RE = /(\d+(?:\.\d+)?)\s*(g|grams?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|slices?)\b/i;
+// Finds the quantity+unit anywhere in the text (start, middle, or inside
+// parentheses — e.g. "Basmati Rice (300g, cooked)"), then strips it plus any
+// parenthetical notes to isolate the plain food name for matching.
 function parseSegmentQuantity(segment) {
-  const m = segment.match(/^(\d+(?:\.\d+)?)\s*(g|grams?|ml|milliliters?|cups?|tbsp|tablespoons?|tsp|teaspoons?|oz|ounces?|slices?)?\s*(?:of\s+)?(.*)$/i);
-  if (m) return { qty: parseFloat(m[1]), unit: (m[2] || "").toLowerCase(), rest: m[3].trim() };
-  return { qty: null, unit: null, rest: segment.trim() };
+  let qty = null;
+  let unit = null;
+  const withUnit = segment.match(QTY_UNIT_RE);
+  if (withUnit) {
+    qty = parseFloat(withUnit[1]);
+    unit = withUnit[2].toLowerCase();
+  } else {
+    const bare = segment.match(/^\s*(\d+(?:\.\d+)?)\b/);
+    if (bare) qty = parseFloat(bare[1]);
+  }
+  let rest = segment
+    .replace(/\([^)]*\)/g, " ")
+    .replace(QTY_UNIT_RE, " ")
+    .replace(/\bof\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!rest) rest = segment.replace(/\([^)]*\)/g, " ").trim();
+  return { qty, unit, rest };
 }
 function toGrams(qty, unit) {
   if (!unit) return qty;
@@ -541,7 +607,7 @@ function dailyShareData(key, day, totals, profile) {
     listLines: day.entries.map((e) => `${e.time}  ${e.name} — ${e.calories} kcal`),
   };
 }
-function weeklyShareData(data, rows, streak) {
+function weeklyShareData(data, rows) {
   const daysWithData = rows.filter((r) => r.totals.calories > 0 || r.water > 0);
   const avg = (fn) => (daysWithData.length ? Math.round(daysWithData.reduce((s, r) => s + fn(r), 0) / daysWithData.length) : 0);
   const avgCalories = avg((r) => r.totals.calories);
@@ -551,12 +617,12 @@ function weeklyShareData(data, rows, streak) {
   const avgWater = avg((r) => r.water);
   const weighIns = rows.filter((r) => r.weight != null);
   const weightChange = weighIns.length >= 2 ? Math.round((weighIns[weighIns.length - 1].weight - weighIns[0].weight) * 10) / 10 : null;
+  const last = rows[rows.length - 1];
   return {
     title: "Weekly Summary",
-    subtitle: `${MONTHS[rows[0].date.getMonth()]} ${rows[0].date.getDate()} – ${MONTHS[rows[6].date.getMonth()]} ${rows[6].date.getDate()}`,
+    subtitle: `${MONTHS[rows[0].date.getMonth()]} ${rows[0].date.getDate()} – ${MONTHS[last.date.getMonth()]} ${last.date.getDate()}`,
     rows: [
       { label: "Weight change", value: weightChange != null ? `${weightChange > 0 ? "+" : ""}${weightChange} kg` : "Not enough data" },
-      { label: "Streak", value: `${streak} days` },
     ],
     bars: [
       { label: "Avg calories", valueText: `${avgCalories} / ${data.profile.calorieGoal} kcal`, pct: clampPct(data.profile.calorieGoal ? (avgCalories / data.profile.calorieGoal) * 100 : 0), color: IMG.gold },
@@ -675,12 +741,12 @@ function WaterWidget({ ml, goal, onQuickAdd, onCustomAdd }) {
           </div>
         </div>
       </div>
-      <div className="water-actions">
+      <div className="water-presets">
         {WATER_PRESETS.map((amt) => (
           <button key={amt} className="chip" onClick={() => onQuickAdd(amt)}><Plus size={13} /> {formatMl(amt)}</button>
         ))}
-        <button className="chip chip-ghost" onClick={() => setCustomOpen((v) => !v)}>Custom</button>
       </div>
+      <button className="chip chip-ghost chip-custom" onClick={() => setCustomOpen((v) => !v)}><Plus size={13} /> Custom amount</button>
       {customOpen && (
         <form className="custom-water-form" onSubmit={(e) => { e.preventDefault(); const n = parseInt(customVal, 10); if (n > 0) { onCustomAdd(n); setCustomVal(""); setCustomOpen(false); } }}>
           <input autoFocus type="number" inputMode="numeric" placeholder="Amount in ml" value={customVal} onChange={(e) => setCustomVal(e.target.value)} className="text-input" />
@@ -1057,7 +1123,7 @@ function LogTab({ data, setData, showToast }) {
   function saveEdit(id) {
     updateDay((dd) => ({
       ...dd,
-      entries: dd.entries.map((e) => (e.id === id ? { ...e, ...Object.fromEntries(Object.entries(editVals).map(([k, v]) => [k, Math.max(0, parseFloat(v) || 0)])) } : e)),
+      entries: dd.entries.map((e) => (e.id === id ? { ...e, ...Object.fromEntries(Object.entries(editVals).map(([k, v]) => [k, k === "calories" ? Math.max(0, Math.round(parseFloat(v) || 0)) : round1(Math.max(0, parseFloat(v) || 0))])) } : e)),
     }));
     setEditingId(null);
     showToast("Entry updated", "good");
@@ -1152,7 +1218,14 @@ function LogTab({ data, setData, showToast }) {
 /* ---------------------------------------------------------------------- */
 
 function WeeklyTab({ data, showToast }) {
-  const rows = useMemo(() => weekRows(data), [data]);
+  const first = useMemo(() => firstActiveKey(data), [data]);
+  const numDays = useMemo(() => {
+    if (!first) return 7;
+    const days = Math.round((keyToDate(todayKey()) - keyToDate(first)) / 86400000) + 1;
+    return Math.max(1, Math.min(7, days));
+  }, [first]);
+  const rows = useMemo(() => weekRows(data, numDays), [data, numDays]);
+
   const daysWithData = rows.filter((r) => r.totals.calories > 0 || r.water > 0);
   const avg = (fn) => (daysWithData.length ? Math.round(daysWithData.reduce((s, r) => s + fn(r), 0) / daysWithData.length) : 0);
   const avgCalories = avg((r) => r.totals.calories);
@@ -1163,24 +1236,26 @@ function WeeklyTab({ data, showToast }) {
   const weighIns = rows.filter((r) => r.weight != null);
   const weightChange = weighIns.length >= 2 ? Math.round((weighIns[weighIns.length - 1].weight - weighIns[0].weight) * 10) / 10 : null;
 
-  let streak = 0;
-  for (let i = 1; i <= 30; i++) {
-    const k = addDays(todayKey(), -i);
-    const t = dayTotals(getDay(data, k)).calories;
-    if (t === 0) break;
-    const ratio = t / data.profile.calorieGoal;
-    if (ratio >= 0.85 && ratio <= 1.15) streak++;
-    else break;
-  }
-
   async function handleShareWeek() {
     try {
-      const canvas = await renderShareCard(weeklyShareData(data, rows, streak));
+      const canvas = await renderShareCard(weeklyShareData(data, rows));
       const result = await shareCardImage(canvas, "sprout-weekly", "Sprout — Weekly Summary");
       if (result === "downloaded") showToast("Image saved — attach it to your message", "good");
     } catch (e) {
       showToast("Couldn't generate the image — try again.", "warn");
     }
+  }
+
+  if (!first) {
+    return (
+      <div className="tab-panel">
+        <div className="empty-state">
+          <TrendingUp size={26} />
+          <p>No data yet.</p>
+          <span>Log a meal, water, or weight on Today to start tracking your week.</span>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1192,7 +1267,6 @@ function WeeklyTab({ data, showToast }) {
         <div className="stat-box"><span className="stat-num">{avgFat}g</span><span className="stat-label">avg fat</span></div>
         <div className="stat-box"><span className="stat-num">{avgWater.toLocaleString()}</span><span className="stat-label">avg water ml</span></div>
         <div className="stat-box"><span className="stat-num">{weightChange != null ? `${weightChange > 0 ? "+" : ""}${weightChange}kg` : "—"}</span><span className="stat-label">weight change</span></div>
-        <div className="stat-box"><span className="stat-num">{streak}</span><span className="stat-label">day streak</span></div>
       </div>
 
       <div className="card">
@@ -1396,22 +1470,43 @@ function WorkoutTab({ data, setData, showToast }) {
         <div className="stat-box"><span className="stat-num">{monthSessions}</span><span className="stat-label">sessions this month</span></div>
       </div>
 
-      {buckets.length > 0 && (
-        <div className="card">
-          <div className="card-title"><Calendar size={15} /> Weekly activity, this month</div>
-          <div className="chart-wrap">
-            <ResponsiveContainer width="100%" height={150}>
-              <BarChart data={buckets.map((b, i) => ({ label: `Wk ${i + 1}`, sessions: b.workoutSessions }))} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 5" stroke="#E1E4D8" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#5B6B5A" }} axisLine={false} tickLine={false} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#5B6B5A" }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #E1E4D8", fontSize: 12 }} />
-                <Bar dataKey="sessions" fill="#4C8B5B" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+      {(() => {
+        const trainingRows = [...rows].reverse().filter((r) => r.workouts.length > 0);
+        return (
+          <div className="card">
+            <div className="card-title"><Calendar size={15} /> Training log, this week</div>
+            {trainingRows.length === 0 ? (
+              <p className="tip-placeholder">No workouts logged this week yet — use the form above to add one.</p>
+            ) : (
+              <div className="training-log">
+                {trainingRows.map((r) => {
+                  const rIsToday = r.key === todayKey();
+                  return (
+                    <div key={r.key} className="training-log-day">
+                      <div className="training-log-day-header">
+                        <span>{rIsToday ? "Today" : `${DOW[r.date.getDay()]}, ${MONTHS[r.date.getMonth()]} ${r.date.getDate()}`}</span>
+                        <span className="training-log-count">{r.workouts.length} session{r.workouts.length > 1 ? "s" : ""}</span>
+                      </div>
+                      <ul className="training-log-exercises">
+                        {r.workouts.map((w) => {
+                          const meta = WORKOUT_TYPES.find((t) => t.value === w.type);
+                          const Icon = meta?.icon || Dumbbell;
+                          return (
+                            <li key={w.id}>
+                              <Icon size={13} />
+                              <span>{describeWorkout(w)}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -1619,7 +1714,9 @@ const CSS = `
 .water-ml { font-family:'Fraunces', serif; font-size: 20px; font-weight: 700; line-height:1; }
 .water-unit { font-size: 12px; font-weight: 500; color: var(--ink-soft); }
 .water-goal { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
-.water-actions { display:flex; flex-wrap:wrap; gap: 8px; }
+.water-presets { display:grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.water-presets .chip { justify-content:center; padding: 9px 6px; }
+.chip-custom { width:100%; justify-content:center; }
 
 .body-card { display:flex; flex-direction:column; gap: 16px; }
 .weight-row { display:flex; align-items:center; gap: 10px; }
@@ -1736,6 +1833,15 @@ const CSS = `
 .workout-entry-desc { flex:1; }
 .workout-entry-delete { background:none; border:none; color:#B7C2AE; padding:2px; }
 .workout-entry-delete:hover { color: var(--clay); }
+
+.training-log { display:flex; flex-direction:column; gap: 16px; }
+.training-log-day { border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+.training-log-day:last-child { border-bottom: none; padding-bottom: 0; }
+.training-log-day-header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 9px; font-family:'Fraunces', serif; font-weight: 600; font-size: 14px; }
+.training-log-count { font-family:'Manrope', sans-serif; font-weight: 700; font-size: 11px; color: var(--good); background: rgba(76,139,91,0.12); padding: 3px 9px; border-radius: 999px; }
+.training-log-exercises { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap: 8px; }
+.training-log-exercises li { display:flex; align-items:center; gap: 9px; font-size: 12.5px; color: var(--ink); }
+.training-log-exercises li svg { color: var(--good); flex-shrink:0; }
 
 .goal-field { margin-bottom: 14px; }
 .goal-field label { display:block; }
