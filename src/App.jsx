@@ -1459,7 +1459,6 @@ function MonthlyTab({ data, showToast }) {
         <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgFat)}g</span><span className="stat-label">avg fat</span></div>
         <div className="stat-box"><span className="stat-num">{overallAvg((b) => b.avgWater).toLocaleString()}</span><span className="stat-label">avg water ml</span></div>
         <div className="stat-box"><span className="stat-num">{totalWeightChange != null ? `${totalWeightChange > 0 ? "+" : ""}${totalWeightChange}kg` : "—"}</span><span className="stat-label">weight change</span></div>
-        <div className="stat-box"><span className="stat-num">{buckets.length}</span><span className="stat-label">weeks tracked</span></div>
       </div>
 
       <div className="card">
