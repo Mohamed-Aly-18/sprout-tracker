@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Flame, Droplets, Plus, Sparkles, Loader2, Trash2, ChevronLeft, ChevronRight,
   Target, TrendingUp, X, UtensilsCrossed, Settings2, Leaf, Sunrise, Share2,
-  Scale, Dumbbell, User, SlidersHorizontal, Bike, Activity, Calendar, Pencil,
+  Scale, Dumbbell, User, SlidersHorizontal, Bike, Activity, Calendar, Pencil, Download, Upload,
 } from "lucide-react";
 import {
   ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip, LineChart, Line,
@@ -243,15 +243,15 @@ function describeWorkout(w) {
 /* ---------------------------------------------------------------------- */
 
 const FOOD_DB = [
-  { names: ["egg", "eggs", "boiled egg", "fried egg", "scrambled egg", "scrambled eggs"], unit: "each", cal: 78, p: 6.3, c: 0.6, f: 5.3 },
+  { names: ["egg", "eggs", "boiled egg", "fried egg", "scrambled egg", "scrambled eggs"], unit: "each", gramsEach: 50, cal: 78, p: 6.3, c: 0.6, f: 5.3 },
   { names: ["rice", "white rice", "cooked rice", "steamed rice"], unit: "g100", cal: 130, p: 2.7, c: 28, f: 0.3 },
   { names: ["brown rice"], unit: "g100", cal: 123, p: 2.6, c: 26, f: 1 },
   { names: ["chicken breast", "chicken", "grilled chicken", "cooked chicken"], unit: "g100", cal: 165, p: 31, c: 0, f: 3.6 },
   { names: ["milk", "whole milk"], unit: "ml100", cal: 61, p: 3.2, c: 4.8, f: 3.3 },
   { names: ["skim milk", "low fat milk"], unit: "ml100", cal: 34, p: 3.4, c: 5, f: 0.1 },
-  { names: ["banana", "bananas"], unit: "each", cal: 105, p: 1.3, c: 27, f: 0.4 },
-  { names: ["apple", "apples"], unit: "each", cal: 95, p: 0.5, c: 25, f: 0.3 },
-  { names: ["bread", "white bread", "slice of bread", "toast"], unit: "each", cal: 79, p: 2.7, c: 15, f: 1 },
+  { names: ["banana", "bananas"], unit: "each", gramsEach: 118, cal: 105, p: 1.3, c: 27, f: 0.4 },
+  { names: ["apple", "apples"], unit: "each", gramsEach: 182, cal: 95, p: 0.5, c: 25, f: 0.3 },
+  { names: ["bread", "white bread", "slice of bread", "toast"], unit: "each", gramsEach: 30, cal: 79, p: 2.7, c: 15, f: 1 },
   { names: ["oats", "oatmeal", "rolled oats"], unit: "g100", cal: 389, p: 16.9, c: 66, f: 6.9 },
   { names: ["salmon", "grilled salmon", "cooked salmon"], unit: "g100", cal: 208, p: 20, c: 0, f: 13 },
   { names: ["broccoli"], unit: "g100", cal: 34, p: 2.8, c: 7, f: 0.4 },
@@ -264,13 +264,13 @@ const FOOD_DB = [
   { names: ["almonds"], unit: "g100", cal: 579, p: 21, c: 22, f: 50 },
   { names: ["peanut butter"], unit: "g100", cal: 588, p: 25, c: 20, f: 50 },
   { names: ["olive oil"], unit: "ml100", cal: 884, p: 0, c: 0, f: 100 },
-  { names: ["avocado", "avocados"], unit: "each", cal: 240, p: 3, c: 13, f: 22 },
-  { names: ["orange", "oranges"], unit: "each", cal: 62, p: 1.2, c: 15, f: 0.2 },
-  { names: ["tomato", "tomatoes"], unit: "each", cal: 22, p: 1.1, c: 4.8, f: 0.2 },
+  { names: ["avocado", "avocados"], unit: "each", gramsEach: 150, cal: 240, p: 3, c: 13, f: 22 },
+  { names: ["orange", "oranges"], unit: "each", gramsEach: 131, cal: 62, p: 1.2, c: 15, f: 0.2 },
+  { names: ["tomato", "tomatoes"], unit: "each", gramsEach: 123, cal: 22, p: 1.1, c: 4.8, f: 0.2 },
   { names: ["spinach"], unit: "g100", cal: 23, p: 2.9, c: 3.6, f: 0.4 },
   { names: ["tuna", "canned tuna"], unit: "g100", cal: 132, p: 28, c: 0, f: 1.3 },
   { names: ["beef", "ground beef", "lean beef"], unit: "g100", cal: 250, p: 26, c: 0, f: 17 },
-  { names: ["black coffee", "coffee"], unit: "each", cal: 2, p: 0.3, c: 0, f: 0 },
+  { names: ["black coffee", "coffee"], unit: "each", gramsEach: 240, cal: 2, p: 0.3, c: 0, f: 0 },
   { names: ["butter"], unit: "g100", cal: 717, p: 0.9, c: 0.1, f: 81 },
   { names: ["honey"], unit: "g100", cal: 304, p: 0.3, c: 82, f: 0 },
   { names: ["turkey breast", "turkey", "cooked turkey"], unit: "g100", cal: 135, p: 30, c: 0, f: 1 },
@@ -279,9 +279,9 @@ const FOOD_DB = [
   { names: ["lentils", "cooked lentils"], unit: "g100", cal: 116, p: 9, c: 20, f: 0.4 },
   { names: ["black beans", "cooked black beans"], unit: "g100", cal: 132, p: 8.9, c: 24, f: 0.5 },
   { names: ["chickpeas", "cooked chickpeas", "garbanzo beans"], unit: "g100", cal: 164, p: 8.9, c: 27, f: 2.6 },
-  { names: ["whole wheat bread", "wholemeal bread"], unit: "each", cal: 81, p: 4, c: 14, f: 1.1 },
+  { names: ["whole wheat bread", "wholemeal bread"], unit: "each", gramsEach: 28, cal: 81, p: 4, c: 14, f: 1.1 },
   { names: ["cottage cheese"], unit: "g100", cal: 98, p: 11, c: 3.4, f: 4.3 },
-  { names: ["whey protein", "protein powder", "protein shake"], unit: "each", cal: 120, p: 24, c: 3, f: 1.5 },
+  { names: ["whey protein", "protein powder", "protein shake"], unit: "each", gramsEach: 30, cal: 120, p: 24, c: 3, f: 1.5 },
 ];
 const UNIT_TO_GRAMS = { cup: 240, tbsp: 15, tablespoon: 15, tsp: 5, teaspoon: 5, oz: 28, ounce: 28, slice: 30 };
 
@@ -366,7 +366,15 @@ function matchFoodDB(segment) {
   if (!entry) return null;
   let multiplier;
   if (entry.unit === "each") {
-    multiplier = qty != null ? qty : 1;
+    if (qty != null && unit) {
+      // A weight/volume was explicitly given (e.g. "150g tomato") — that's
+      // 150 grams of tomato, not 150 whole tomatoes. Convert through the
+      // food's average each-weight instead of using the number as a count.
+      const grams = toGrams(qty, unit);
+      multiplier = entry.gramsEach ? grams / entry.gramsEach : qty;
+    } else {
+      multiplier = qty != null ? qty : 1;
+    }
   } else {
     const grams = qty != null ? toGrams(qty, unit) : 100;
     multiplier = grams / 100;
@@ -795,9 +803,11 @@ function WeightWidget({ day, updateDay, showToast }) {
 function MealLogger({ day, updateDay, showToast }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const submittingRef = useRef(false); // synchronous guard — React state updates are batched/async, so a rapid double-fire (double-tap, duplicate event, etc.) can read stale `busy` before a re-render happens. A ref updates instantly and closes that race condition.
   async function handleLog() {
     const trimmed = text.trim();
-    if (!trimmed || busy) return;
+    if (!trimmed || submittingRef.current) return;
+    submittingRef.current = true;
     setBusy(true);
     try {
       const items = await estimateNutrition(trimmed);
@@ -805,7 +815,18 @@ function MealLogger({ day, updateDay, showToast }) {
         showToast("Couldn't find anything to log there — try describing a food or drink.", "warn");
       } else {
         const time = timeNow();
-        updateDay((d) => ({ ...d, entries: [...d.entries, ...items.map((it) => ({ id: uid(), time, ...it }))] }));
+        const newEntries = items.map((it) => ({ id: uid(), time, ...it }));
+        updateDay((d) => {
+          // Defensive dedupe: if the most recently logged entries already
+          // exactly match what we're about to add, skip — this makes a
+          // duplicate submission structurally impossible to actually save,
+          // regardless of what UI-level glitch might trigger it.
+          const tail = d.entries.slice(-newEntries.length);
+          const isDuplicate =
+            tail.length === newEntries.length &&
+            tail.every((e, i) => e.name === newEntries[i].name && e.calories === newEntries[i].calories && e.protein === newEntries[i].protein && e.carbs === newEntries[i].carbs && e.fat === newEntries[i].fat);
+          return isDuplicate ? d : { ...d, entries: [...d.entries, ...newEntries] };
+        });
         const kcal = items.reduce((s, i) => s + i.calories, 0);
         showToast(`Logged ${items.length > 1 ? `${items.length} items` : items[0].name} · ${kcal} kcal`, "good");
         setText("");
@@ -813,6 +834,7 @@ function MealLogger({ day, updateDay, showToast }) {
     } catch (e) {
       showToast(e?.message ? `Couldn't log that meal — ${e.message}` : "Couldn't estimate that meal — check your connection and try again.", "warn");
     } finally {
+      submittingRef.current = false;
       setBusy(false);
     }
   }
@@ -938,6 +960,44 @@ function Toast({ toast, onDone }) {
 
 function CustomizeModal({ data, setData, showToast, onClose }) {
   const [form, setForm] = useState({ ...DEFAULT_PROFILE, ...data.profile });
+  const fileInputRef = useRef(null);
+
+  function handleExport() {
+    const payload = { exportedAt: new Date().toISOString(), profile: data.profile, days: data.days };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sprout-backup-${todayKey()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    showToast("Backup downloaded", "good");
+  }
+  function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed || typeof parsed !== "object" || !parsed.days) {
+          showToast("That doesn't look like a Sprout backup file.", "warn");
+          return;
+        }
+        const ok = window.confirm("Importing will replace all your current logged data with this backup. Continue?");
+        if (!ok) return;
+        setData({ profile: { ...DEFAULT_PROFILE, ...(parsed.profile || {}) }, days: parsed.days || {} });
+        showToast("Backup restored", "good");
+        onClose();
+      } catch (err) {
+        showToast("Couldn't read that file — make sure it's a Sprout backup JSON.", "warn");
+      }
+    };
+    reader.readAsText(file);
+  }
 
   function field(key, label, unit) {
     return (
@@ -1017,6 +1077,18 @@ function CustomizeModal({ data, setData, showToast, onClose }) {
             {field("carbGoal", "Carbs", "g")}
             {field("fatGoal", "Fat", "g")}
             {field("waterGoal", "Water", "ml")}
+          </div>
+          <div className="card">
+            <div className="card-title"><Download size={15} /> Backup & restore</div>
+            <p className="tip-placeholder">
+              Download everything you've logged as a file you can keep safe, or restore from a backup —
+              worth doing before removing this app from your home screen or clearing browser data.
+            </p>
+            <div className="backup-actions">
+              <button className="btn-ghost" onClick={handleExport}><Download size={14} /> Export backup</button>
+              <button className="btn-ghost" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import backup</button>
+            </div>
+            <input ref={fileInputRef} type="file" accept="application/json" onChange={handleImportFile} style={{ display: "none" }} />
           </div>
         </div>
         <div className="modal-footer">
@@ -1854,6 +1926,8 @@ const CSS = `
 .goal-field-unit { padding: 0 12px; font-size: 12px; color: var(--ink-soft); font-weight: 600; }
 .goal-field-hint { font-size: 11px; color: var(--ink-soft); margin-top: 4px; display:block; }
 .suggest-hint { margin-top: 10px; line-height: 1.5; }
+.backup-actions { display:flex; gap: 10px; flex-wrap:wrap; }
+.backup-actions .btn-ghost { flex:1; justify-content:center; }
 
 .modal-overlay { position:fixed; inset:0; background: rgba(32,43,34,0.45); display:flex; align-items:flex-end; justify-content:center; z-index: 50; }
 .modal-panel { background: var(--bg); width:100%; max-width: 460px; max-height: 88vh; border-radius: 24px 24px 0 0; display:flex; flex-direction:column; animation: modalup 0.3s cubic-bezier(.25,.9,.35,1); }

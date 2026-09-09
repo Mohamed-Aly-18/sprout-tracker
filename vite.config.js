@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["icons/apple-touch-icon.png", "favicon.svg"],
       manifest: {
         name: "Sprout — Nutrition & Water Tracker",
@@ -31,6 +32,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        clientsClaim: true,
+        skipWaiting: true,
         // never let the service worker try to cache/serve the API route —
         // it always needs a live network round trip to your backend.
         navigateFallbackDenylist: [/^\/api\//],
