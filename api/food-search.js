@@ -6,7 +6,42 @@
 // banana, etc.) — rather than Branded (packaged products) or Survey data,
 // which are noisier and less consistent for this use case.
 
-const NUTRIENT_IDS = { energy: 1008, protein: 1003, fat: 1004, carbs: 1005 };
+// USDA's own bug tracker (github.com/USDA/USDA-APIs issue #102) confirms
+// their documented schema and their live /foods/search response don't
+// fully agree with each other, and Foundation-dataset foods sometimes
+// report energy under a different nutrient number (Atwater factors)
+// instead of the standard one. Rather than bet on a single field name,
+// this checks every variant that's actually been observed in the wild.
+function pickNutrient(foodNutrients, candidateIds, nameHint, preferUnit) {
+  const list = foodNutrients || [];
+  const readId = (n) => n.nutrientId ?? n.id ?? n.nutrient?.id ?? Number(n.nutrientNumber ?? n.number ?? n.nutrient?.number);
+  const readVal = (n) => {
+    const v = n.value ?? n.amount ?? n.nutrient?.amount;
+    return v == null ? null : Number(v);
+  };
+  const readName = (n) => (n.nutrientName || n.name || n.nutrient?.name || "").toLowerCase();
+  const readUnit = (n) => (n.unitName || n.nutrient?.unitName || "").toUpperCase();
+
+  for (const n of list) {
+    if (candidateIds.includes(readId(n))) {
+      const v = readVal(n);
+      if (v != null) return v;
+    }
+  }
+  const nameMatches = list.filter((n) => readName(n).includes(nameHint));
+  if (preferUnit) {
+    const unitMatch = nameMatches.find((n) => readUnit(n) === preferUnit);
+    if (unitMatch) {
+      const v = readVal(unitMatch);
+      if (v != null) return v;
+    }
+  }
+  for (const n of nameMatches) {
+    const v = readVal(n);
+    if (v != null) return v;
+  }
+  return 0;
+}
 
 // Words that mean the person already told us exactly what state they want —
 // when any of these appear in the query, we leave USDA's own ranking alone.
@@ -73,10 +108,6 @@ export default async function handler(req, res) {
     const results = rerankByPrepState(
       (data.foods || [])
         .map((food) => {
-          const get = (id) => {
-            const n = (food.foodNutrients || []).find((fn) => fn.nutrientId === id);
-            return n ? Number(n.value) || 0 : 0;
-          };
           // USDA descriptions come back in ALL CAPS ("CHICKEN, BROILERS OR
           // FRYERS, BREAST, MEAT ONLY, COOKED, ROASTED") — title-case them so
           // they read naturally in the app.
@@ -86,10 +117,10 @@ export default async function handler(req, res) {
           return {
             id: String(food.fdcId),
             name,
-            cal: get(NUTRIENT_IDS.energy),
-            protein: get(NUTRIENT_IDS.protein),
-            carbs: get(NUTRIENT_IDS.carbs),
-            fat: get(NUTRIENT_IDS.fat),
+            cal: pickNutrient(food.foodNutrients, [1008, 2047, 2048], "energy", "KCAL"),
+            protein: pickNutrient(food.foodNutrients, [1003, 203], "protein"),
+            carbs: pickNutrient(food.foodNutrients, [1005, 205], "carbohydrate"),
+            fat: pickNutrient(food.foodNutrients, [1004, 204], "total lipid"),
             gramsEach: null, // Foundation/SR Legacy values are always per 100g — no "each" concept to convert through
           };
         })
