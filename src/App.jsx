@@ -270,7 +270,8 @@ const FOOD_DB = [
   { names: ["orange", "oranges"], gramsEach: 131, cal: 47, p: 0.9, c: 11.8, f: 0.1 },
   { names: ["tomato", "tomatoes"], gramsEach: 123, cal: 18, p: 0.9, c: 3.9, f: 0.2 },
   { names: ["spinach"], cal: 23, p: 2.9, c: 3.6, f: 0.4 },
-  { names: ["tuna", "canned tuna", "tuna in water"], cal: 116, p: 25.5, c: 0, f: 0.8 },
+  { names: ["tuna", "canned tuna", "light tuna", "tuna in water"], cal: 116, p: 25.5, c: 0, f: 0.8 },
+  { names: ["white tuna", "albacore tuna", "albacore"], cal: 127, p: 25.7, c: 0, f: 2.9 },
   { names: ["beef", "ground beef", "lean beef"], cal: 250, p: 26, c: 0, f: 17 },
   { names: ["black coffee", "coffee"], cal: 1, p: 0.1, c: 0, f: 0 },
   { names: ["butter"], cal: 717, p: 0.9, c: 0.1, f: 81 },
@@ -1553,7 +1554,7 @@ function WorkoutTab({ data, setData, showToast }) {
   const weekSessions = rows.reduce((s, r) => s + r.workouts.length, 0);
   const weekActiveDays = rows.filter((r) => r.workouts.length > 0).length;
   const buckets = useMemo(() => monthlyBuckets(data), [data]);
-  const monthSessions = buckets.reduce((s, b) => s + b.workoutSessions, 0);
+  const monthWorkoutDays = buckets.reduce((s, b) => s + b.workoutDays, 0);
 
   return (
     <div className="tab-panel">
@@ -1611,7 +1612,7 @@ function WorkoutTab({ data, setData, showToast }) {
 
       <CollapsibleSection title="This month" icon={Calendar} defaultOpen={false}>
         <div className="stat-grid">
-          <div className="stat-box"><span className="stat-num">{monthSessions}</span><span className="stat-label">sessions this month</span></div>
+          <div className="stat-box"><span className="stat-num">{monthWorkoutDays}</span><span className="stat-label">workout days this month</span></div>
           <div className="stat-box"><span className="stat-num">{buckets.filter((b) => b.workoutDays > 0).length}/{buckets.length || 0}</span><span className="stat-label">active weeks</span></div>
         </div>
       </CollapsibleSection>
