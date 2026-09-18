@@ -1469,17 +1469,25 @@ function CustomizeModal({ data, setData, showToast, onToggleTheme, onClose }) {
 function DateScroller({ selectedKey, onSelect, data, days = 30 }) {
   const scrollerRef = useRef(null);
   const activeRef = useRef(null);
+  const hasScrolledRef = useRef(false); // first scroll-into-view is instant; later ones animate
 
   const items = useMemo(() => {
     const out = [];
+    let prevMonth = null;
     for (let i = days - 1; i >= 0; i--) {
       const k = addDays(todayKey(), -i);
       const day = getDay(data, k);
+      const date = keyToDate(k);
+      const month = date.getMonth();
       out.push({
         key: k,
-        date: keyToDate(k),
+        date,
         hasData: day.entries.length > 0 || day.water > 0 || day.weight != null || day.workouts.length > 0,
+        // Flags the first chip of each month so a date like "19" is never
+        // ambiguous between, say, August 19 and September 19.
+        showMonth: month !== prevMonth,
       });
+      prevMonth = month;
     }
     return out;
   }, [data, days]);
@@ -1487,7 +1495,8 @@ function DateScroller({ selectedKey, onSelect, data, days = 30 }) {
   useEffect(() => {
     // Keep the selected date visible without yanking the whole page around.
     if (activeRef.current && scrollerRef.current) {
-      activeRef.current.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+      activeRef.current.scrollIntoView({ behavior: hasScrolledRef.current ? "smooth" : "auto", block: "nearest", inline: "center" });
+      hasScrolledRef.current = true;
     }
   }, [selectedKey]);
 
@@ -1506,6 +1515,7 @@ function DateScroller({ selectedKey, onSelect, data, days = 30 }) {
             className={`date-chip ${isSelected ? "selected" : ""} ${isToday ? "is-today" : ""}`}
             onClick={() => onSelect(it.key)}
           >
+            <span className="date-chip-month">{it.showMonth ? MONTHS[it.date.getMonth()] : "\u00A0"}</span>
             <span className="date-chip-dow">{DOW[it.date.getDay()]}</span>
             <span className="date-chip-num">{it.date.getDate()}</span>
             <span className={`date-chip-dot ${it.hasData ? "on" : ""}`} aria-hidden="true" />
@@ -1588,16 +1598,18 @@ function MealList({ day, updateDay, showToast, isToday }) {
             <>
               <div className="entry-top">
                 <div><div className="entry-name">{e.name}</div><div className="entry-time">{e.time}</div></div>
-                <div className="entry-kcal">{e.calories} kcal</div>
+                <div className="entry-top-right">
+                  <div className="entry-kcal">{e.calories} kcal</div>
+                  <div className="entry-actions">
+                    <button className="entry-action-btn" onClick={() => startEdit(e)} aria-label={`Edit ${e.name}`}><Pencil size={15} /></button>
+                    <button className="entry-action-btn" onClick={() => removeEntry(e.id)} aria-label={`Delete ${e.name}`}><Trash2 size={15} /></button>
+                  </div>
+                </div>
               </div>
               <div className="entry-macros">
                 <span><i className="dot dot-clay" />{e.protein}g protein</span>
                 <span><i className="dot dot-gold" />{e.carbs}g carbs</span>
                 <span><i className="dot dot-plum" />{e.fat}g fat</span>
-              </div>
-              <div className="entry-actions">
-                <button className="entry-action-btn" onClick={() => startEdit(e)} aria-label={`Edit ${e.name}`}><Pencil size={15} /></button>
-                <button className="entry-action-btn" onClick={() => removeEntry(e.id)} aria-label={`Delete ${e.name}`}><Trash2 size={15} /></button>
               </div>
             </>
           )}
@@ -2228,6 +2240,8 @@ const CSS = `
   --jar-bg: #F7FAF7;
   --shadow: rgba(32,43,34,0.08);
   --focus: #3E7CB1;
+  --tabbar-fill: rgba(255,255,255,0.9);   /* translucent over --bg already gives clear separation in light */
+  --tabbar-indicator: var(--surface-3);
   font-family: 'Manrope', system-ui, sans-serif;
   background: var(--bg);
   color: var(--ink);
@@ -2271,6 +2285,8 @@ const CSS = `
   --jar-bg: #1B241D;
   --shadow: rgba(0,0,0,0.4);
   --focus: #7FB5DE;
+  --tabbar-fill: #333F36;      /* dedicated, solid — translucent --surface blended into --bg was only 1.09:1, barely visible */
+  --tabbar-indicator: #39473D;
 }
 /* In dark mode the "ink" fill of primary buttons would be near-white, so flip
    them to the brand green with dark text to keep them legible and on-brand. */
@@ -2279,8 +2295,6 @@ const CSS = `
 .napp[data-theme="dark"] .toast { background: var(--surface-3); color: var(--ink); }
 .napp[data-theme="dark"] .toast-good { background: var(--good); color: #10170F; }
 .napp[data-theme="dark"] .toast-warn { background: var(--clay); color: #1A0D0A; }
-.napp[data-theme="dark"] .tabbar { background: rgba(27,36,29,0.92); }
-.napp[data-theme="dark"] .tabbar-indicator { background: var(--surface-3); }
 .napp[data-theme="dark"] .date-chip.selected { background: var(--good); color: #10170F; border-color: var(--good); }
 
 .napp *, .napp *::before, .napp *::after { box-sizing: border-box; }
@@ -2296,8 +2310,8 @@ const CSS = `
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.napp-main { flex: 1; overflow-y: auto; padding: 20px 16px 96px; }
-.tab-panel { display: flex; flex-direction: column; gap: 14px; animation: fadein 0.28s ease; }
+.napp-main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px 16px 96px; }
+.tab-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; animation: fadein 0.28s ease; }
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 .today-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
@@ -2427,10 +2441,11 @@ const CSS = `
 .empty-state span { font-size: 12.5px; }
 
 .entry-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap: 10px; }
-.entry-card { position:relative; background: var(--surface); border:1px solid var(--border); border-radius: 16px; padding: 14px 70px 14px 14px; animation: fadein 0.25s ease; }
+.entry-card { background: var(--surface); border:1px solid var(--border); border-radius: 16px; padding: 14px; animation: fadein 0.25s ease; }
 .entry-top { display:flex; justify-content:space-between; align-items:flex-start; gap: 10px; }
 .entry-name { font-weight: 700; font-size: 13.5px; }
 .entry-time { font-size: 11px; color: var(--ink-soft); margin-top: 2px; }
+.entry-top-right { display:flex; flex-direction:column; align-items:flex-end; gap: 8px; flex-shrink: 0; }
 .entry-kcal { font-size: 13px; font-weight: 700; color: var(--gold-text); white-space:nowrap; }
 .entry-macros { display:flex; gap: 12px; margin-top: 9px; font-size: 11px; color: var(--ink-soft); }
 .entry-macros span { display:flex; align-items:center; gap: 5px; }
@@ -2439,7 +2454,7 @@ const CSS = `
 .dot-gold { background: var(--gold); }
 .dot-plum { background: var(--plum); }
 .dot-water { background: var(--water); }
-.entry-actions { position:absolute; top: 14px; right: 12px; display:flex; gap: 6px; }
+.entry-actions { display:flex; gap: 6px; }
 .entry-action-btn { background: none; border:none; color: var(--muted-icon); padding: 4px; }
 .entry-action-btn:hover { color: var(--good); }
 .entry-edit-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -2529,13 +2544,13 @@ const CSS = `
 
 .tabbar {
   position: sticky; bottom: 0; left:0; right:0;
-  background: rgba(255,255,255,0.9); backdrop-filter: blur(10px);
+  background: var(--tabbar-fill); backdrop-filter: blur(10px);
   border-top: 1px solid var(--border);
   display:grid; grid-template-columns: repeat(5,1fr);
   padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
   position: relative;
 }
-.tabbar-indicator { position:absolute; top: 4px; height: calc(100% - 8px); width: 25%; background: var(--surface-3); border-radius: 14px; transition: left 0.35s cubic-bezier(.25,.9,.35,1); z-index:0; }
+.tabbar-indicator { position:absolute; top: 4px; height: calc(100% - 8px); width: 25%; background: var(--tabbar-indicator); border-radius: 14px; transition: left 0.35s cubic-bezier(.25,.9,.35,1); z-index:0; }
 .tabbar-btn { position: relative; z-index: 1; background: none; border: none; color: var(--ink-soft); display:flex; flex-direction:column; align-items:center; gap: 3px; padding: 7px 2px; font-size: 9.5px; font-weight: 700; transition: color 0.2s ease; }
 .tabbar-btn.active { color: var(--good-text); }
 
@@ -2543,16 +2558,21 @@ const CSS = `
 .date-scroller {
   display:flex; gap: 8px; overflow-x:auto; padding: 2px 2px 6px;
   scrollbar-width:none; -ms-overflow-style:none; scroll-behavior:smooth;
+  touch-action: pan-x; overscroll-behavior-x: contain;
+  min-width: 0; /* flex items default to min-width:auto, which refuses to shrink below
+                   the row's full content width (~1860px for 30 chips) — that was pushing
+                   the whole app wider than the viewport and throwing off the tab bar. */
 }
 .date-scroller::-webkit-scrollbar { display:none; }
 .date-chip {
-  flex: 0 0 auto; min-width: 48px; min-height: 60px;
+  flex: 0 0 auto; min-width: 48px; min-height: 68px;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 2px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
   padding: 8px 6px; color: var(--ink-soft);
   transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
 }
 .date-chip:active { transform: scale(0.95); }
+.date-chip-month { font-size: 8.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gold-text); margin-bottom: 1px; }
 .date-chip-dow { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
 .date-chip-num { font-family:'Fraunces', serif; font-size: 17px; font-weight: 700; line-height: 1; color: var(--ink); }
 .date-chip-dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; }
